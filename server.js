@@ -1,10 +1,15 @@
 const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const cors = require('cors');
+const path = require('path');
 
 const app = express();
 app.use(express.json());
 app.use(cors());
+
+// I-serve ang buong frontend files mo (mga HTML, CSS, JS, images) mula sa public o current folder
+app.use(express.static(path.join(__dirname, 'public')));
+// Kung sakaling nasa root folder lang din ang HTML files mo, pwede ring tanggalin o palitan ito.
 
 // Lumilikha ito ng local database.sqlite file sa iyong PC
 const db = new sqlite3.Database('./database.sqlite', (err) => {
@@ -15,7 +20,7 @@ const db = new sqlite3.Database('./database.sqlite', (err) => {
   }
 });
 
-// Halimbawa ng table creation kung wala pa
+// Table para sa couple dashboard / items
 db.run(`CREATE TABLE IF NOT EXISTS items (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT,
@@ -33,7 +38,7 @@ app.get('/api/data', (req, res) => {
   });
 });
 
-// Endpoint para mag-save ng bagong data
+// Endpoint para mag-save ng bagong data (tulad ng couple names o dashboard updates)
 app.post('/api/data', (req, res) => {
   const { name } = req.body;
   db.run(`INSERT INTO items (name) VALUES (?)`, [name], function(err) {
@@ -43,6 +48,11 @@ app.post('/api/data', (req, res) => {
     }
     res.json({ id: this.lastID, name });
   });
+});
+
+// Fallback para sa frontend routing kung single-page app man ito
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // Patakbuhin ang server sa port 3000
