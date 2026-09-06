@@ -13,36 +13,6 @@
     <link rel="manifest" href="/manifest.json">
 
     <link rel="stylesheet" href="css/style.css?v=20260830-2">
-    <style>
-        /* Status Indicator Styling */
-        .system-status-indicator {
-            margin-top: 1rem;
-            padding: 8px 12px;
-            font-size: 0.85rem;
-            border-radius: 6px;
-            text-align: center;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            font-weight: 500;
-            transition: all 0.3s ease;
-        }
-        .status-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            display: inline-block;
-        }
-        .status-online { background-color: #10b981; color: #065f46; background-color: #ecfdf5; border: 1px solid #a7f3d0; }
-        .status-online .status-dot { background-color: #10b981; box-shadow: 0 0 8px #10b981; }
-        
-        .status-offline { background-color: #f59e0b; color: #78350f; background-color: #fffbeb; border: 1px solid #fde68a; }
-        .status-offline .status-dot { background-color: #f59e0b; }
-
-        .status-exceeded { background-color: #ef4444; color: #7f1d1d; background-color: #fef2f2; border: 1px solid #fecaca; }
-        .status-exceeded .status-dot { background-color: #ef4444; box-shadow: 0 0 8px #ef4444; }
-    </style>
 </head>
 
 <body>
@@ -100,22 +70,10 @@
             </a>
         </p>
 
-        <!-- System Mode & Exceed Indicator -->
-        <div id="systemStatusBanner" class="system-status-indicator status-online">
-            <span class="status-dot"></span>
-            <span id="systemStatusText">System Online (Cloud Connected)</span>
-        </div>
-
     </div>
 </div>
 
-<!-- === OFFLINE-FIRST & HYBRID AUTH MODULES === -->
-<script src="js/logger.js"></script>
-<script src="js/error-manager.js"></script>
-<script src="js/local-db.js"></script>
-<script src="js/hybrid-auth.js"></script>
-
-<!-- Login Script -->
+<!-- ITINAMA: Inalis ang js/script.js dito dahil para lamang ito sa Dashboard/Admin pages -->
 <script src="js/login.js?v=20260830-2"></script>
 
 <script>
@@ -126,38 +84,6 @@ if ("serviceWorker" in navigator) {
             .catch(err => console.error("Service Worker registration failed:", err));
     });
 }
-
-// Dynamic Status Checker for Offline / Local Mode / Limit Exceeded
-window.addEventListener("DOMContentLoaded", () => {
-    const banner = document.getElementById("systemStatusBanner");
-    const text = document.getElementById("systemStatusText");
-
-    function updateConnectionStatus() {
-        const isOffline = !navigator.onLine;
-        
-        // Pwede ring masalo dito ang flag kung sakaling nag-trigger ang error manager sa quota/limit exceeded
-        const quotaExceeded = window.isQuotaExceeded || false; 
-
-        banner.className = "system-status-indicator";
-
-        if (quotaExceeded) {
-            banner.classList.add("status-exceeded");
-            text.textContent = "API Limit / Quota Exceeded - Running Restricted Mode";
-        } else if (isOffline) {
-            banner.classList.add("status-offline");
-            text.textContent = "Local Mode Active (Offline Storage)";
-        } else {
-            banner.classList.add("status-online");
-            text.textContent = "System Online (Cloud Connected)";
-        }
-    }
-
-    window.addEventListener("online", updateConnectionStatus);
-    window.addEventListener("offline", updateConnectionStatus);
-    
-    // Initial check
-    updateConnectionStatus();
-});
 </script>
 
 </body>

@@ -12,104 +12,6 @@ console.log("Host:", location.hostname);
 console.log("LOCAL_MODE:", LOCAL_MODE);
 console.log("================================");
 
-// =========================================
-// PHASE 9 — MEMORY CACHE MANAGER
-// Caches: Projects, Settings, Dropdowns, Users, Music types, Month list, Year list, Permissions, Current user
-// =========================================
-class AppMemoryCache {
-    constructor() {
-        this.store = new Map();
-    }
-
-    set(key, value) {
-        this.store.set(key, {
-            data: value,
-            timestamp: Date.now()
-        });
-        console.log(`[CACHE SET] ${key}`);
-    }
-
-    get(key) {
-        const item = this.store.get(key);
-        if (!item) return null;
-        console.log(`[CACHE HIT] ${key}`);
-        return item.data;
-    }
-
-    invalidate(keyOrPrefix) {
-        if (!keyOrPrefix) {
-            this.store.clear();
-            console.log("[CACHE CLEARED ALL]");
-            return;
-        }
-        for (const key of this.store.keys()) {
-            if (key === keyOrPrefix || key.startsWith(keyOrPrefix)) {
-                this.store.delete(key);
-                console.log(`[CACHE INVALIDATED] ${key}`);
-            }
-        }
-    }
-}
-
-const AppCache = new AppMemoryCache();
-
-// =========================================
-// PHASE 10 — REQUEST DEDUPLICATOR (HYBRID / OFFLINE-AWARE)
-// Prevents duplicate in-flight requests from rapid clicks, tab switching, focus/blur events.
-// Updated to integrate with Offline Controller and Queue when cloud fails.
-// =========================================
-class RequestDeduplicator {
-    constructor() {
-        this.inFlightRequests = new Map();
-    }
-
-    async fetch(url, options = {}) {
-        const method = (options.method || 'GET').toUpperCase();
-        
-        // Huwag i-deduplicate ang POST, PUT, DELETE para ligtas ang data mutations
-        if (method !== 'GET') {
-            return window.fetch(url, options);
-        }
-
-        const cacheKey = url;
-
-        // Kung may active request na kapareho, i-reuse ang promise na iyon
-        if (this.inFlightRequests.has(cacheKey)) {
-            console.log(`[DEDUPLICATE] Reusing active request for: ${url}`);
-            const response = await this.inFlightRequests.get(cacheKey);
-            return response.clone();
-        }
-
-        // Lumikha ng bagong request promise na may offline fallback handling
-        const requestPromise = window.fetch(url, options).then(response => {
-            if (response.status === 429) {
-                window.isQuotaExceeded = true;
-            }
-            if (!response.ok && window.KBErrorManager) {
-                window.KBErrorManager.captureApiError(url, response.status, "API responded with non-OK status");
-            }
-            return response;
-        }).catch(err => {
-            if (window.KBErrorManager) {
-                window.KBErrorManager.captureApiError(url, 0, err.message);
-            }
-            throw err;
-        }).finally(() => {
-            this.inFlightRequests.delete(cacheKey);
-        });
-
-        this.inFlightRequests.set(cacheKey, requestPromise);
-
-        const response = await requestPromise;
-        return response.clone();
-    }
-}
-
-const DeduplicatedFetch = new RequestDeduplicator();
-
-// Legacy compatibility para sa mga umiiral na function
-const projectsMemoryCache = {};
-
 // =========================
 // MONTH MAP & NAMES
 // =========================
@@ -254,24 +156,17 @@ async function recordActivity(action, details = "") {
         
         const clientInfo = await getClientDeviceInfo();
 
-        const payload = {
-            user_name: userName,
-            action: action,
-            details: details,
-            browser: clientInfo.browser,
-            os: clientInfo.os,
-            device: clientInfo.device
-        };
-
-        if (window.KBOfflineController && window.KBOfflineController.isOfflineMode() && window.KBSyncQueue) {
-            await window.KBSyncQueue.addQueueItem('LOGS', '/api/logs', 'POST', payload);
-            return;
-        }
-
         await fetch("/api/logs", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
+            body: JSON.stringify({
+                user_name: userName,
+                action: action,
+                details: details,
+                browser: clientInfo.browser,
+                os: clientInfo.os,
+                device: clientInfo.device
+            })
         });
     } catch (err) {
         console.error("Error recording activity:", err);
@@ -492,9 +387,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-// ==================================
-// CORE LOGIC: SAVE & LOAD (REST API)
-// ==================================
+/* ==================================
+   CORE LOGIC: SAVE & LOAD (REST API)
+================================== */
 
 function collectRowData(row) {
     try {
@@ -657,7 +552,7 @@ function populateRow(row, data) {
 }
 
 /* ==================================
-    CLEAR TABLE (MONTH SWITCH)
+   CLEAR TABLE (MONTH SWITCH)
 ================================== */
 function clearProjectTable() {
     document.querySelectorAll(".project-table tbody tr").forEach(row => {
@@ -772,25 +667,14 @@ function loadProjectsLocal() {
 }
 
 // ==================================
-// ONLINE LOAD FUNCTION (Optimized with AppCache & Offline Controller Hook)
+// ONLINE LOAD FUNCTION
 // ==================================
 async function loadProjects() {
     console.log("========== LOAD START ==========");
     console.log("currentYear :", currentYear);
     console.log("currentMonth:", currentMonth);
 
-    const cacheKey = `projects_${currentYear}_${currentMonth}`;
-
-    const cachedPayload = AppCache.get(cacheKey) || projectsMemoryCache[cacheKey];
-    if (cachedPayload) {
-        console.log(`[LOAD] Using memory cache for ${cacheKey}`);
-        monthLocks = cachedPayload.lockedMonths || {};
-        cachedHasDataMonths = cachedPayload.hasDataMonths || {};
-        renderProjectsData(cachedPayload.projects, monthLocks, cachedHasDataMonths);
-        return;
-    }
-
-    if (LOCAL_MODE || (window.KBOfflineController && window.KBOfflineController.isOfflineMode())) {
+    if (LOCAL_MODE) {
         const restored = restoreProjectsLocal(currentYear, currentMonth);
         if (!restored) {
             clearProjectTable();
@@ -801,7 +685,7 @@ async function loadProjects() {
     }
 
     try {
-        const response = await DeduplicatedFetch.fetch(
+        const response = await fetch(
             `/api/projects?year=${currentYear}&month=${monthMap[currentMonth]}&t=${Date.now()}`,
             {
                 cache: "no-store",
@@ -809,13 +693,8 @@ async function loadProjects() {
             }
         );
 
-        if (response.status === 429) {
-            window.isQuotaExceeded = true;
-        }
-
         if (!response.ok) {
             console.error("[LOAD] API returned error:", response.status);
-            restoreProjectsLocal(currentYear, currentMonth);
             return;
         }
 
@@ -825,61 +704,47 @@ async function loadProjects() {
         monthLocks = responseData.lockedMonths || {};
         cachedHasDataMonths = responseData.hasDataMonths || {};
 
-        const payloadToCache = {
-            projects: projectsData,
-            lockedMonths: monthLocks,
-            hasDataMonths: cachedHasDataMonths
-        };
+        await updateMonthHasDataUI(cachedHasDataMonths);
 
-        AppCache.set(cacheKey, payloadToCache);
-        projectsMemoryCache[cacheKey] = payloadToCache;
+        if (!projectsData.length) {
+            clearProjectTable();
+        }
 
-        renderProjectsData(projectsData, monthLocks, cachedHasDataMonths);
+        const rows = document.querySelectorAll(".project-table tbody tr");
 
-    } catch (e) {
-        console.error("[LOAD] Error loading projects (falling back to local):", e);
-        restoreProjectsLocal(currentYear, currentMonth);
-    }
-}
+        if (Array.isArray(projectsData) && projectsData.length > 0) {
+            let matchedCount = 0;
 
-async function renderProjectsData(projectsData, monthLocksMap, hasDataMonthsMap) {
-    await updateMonthHasDataUI(hasDataMonthsMap);
+            rows.forEach((row) => {
+                const rowId = parseInt(row.getAttribute("data-row-id"), 10);
+                const data = projectsData.find(p => p.rowId === rowId);
 
-    if (!projectsData.length) {
-        clearProjectTable();
-    }
+                if (data) {
+                    populateRow(row, data);
+                    matchedCount++;
+                }
+            });
 
-    const rows = document.querySelectorAll(".project-table tbody tr");
+            updateMonthLockUI();
+            await updateMonthHasDataUI(cachedHasDataMonths);
+            console.log(`[LOAD] Successfully matched ${matchedCount} rows`);
+        }
 
-    if (Array.isArray(projectsData) && projectsData.length > 0) {
-        let matchedCount = 0;
-
-        rows.forEach((row) => {
-            const rowId = parseInt(row.getAttribute("data-row-id"), 10);
-            const data = projectsData.find(p => p.rowId === rowId);
-
-            if (data) {
-                populateRow(row, data);
-                matchedCount++;
+        document.querySelectorAll(".month-btn").forEach(btn => {
+            const key = getMonthKey(currentYear, btn.dataset.month);
+            const locked = !!monthLocks[key];
+            if (typeof IS_ADMIN !== "undefined" && IS_ADMIN) {
+                btn.classList.toggle("locked", locked);
+            } else {
+                btn.classList.remove("locked");
             }
         });
 
         updateMonthLockUI();
-        updateMonthHasDataUI(hasDataMonthsMap);
-        console.log(`[LOAD] Successfully matched ${matchedCount} rows`);
+
+    } catch (e) {
+        console.error("[LOAD] Error loading projects:", e);
     }
-
-    document.querySelectorAll(".month-btn").forEach(btn => {
-        const key = getMonthKey(currentYear, btn.dataset.month);
-        const locked = !!monthLocksMap[key];
-        if (typeof IS_ADMIN !== "undefined" && IS_ADMIN) {
-            btn.classList.toggle("locked", locked);
-        } else {
-            btn.classList.remove("locked");
-        }
-    });
-
-    updateMonthLockUI();
 
     document.querySelectorAll(".status-select").forEach(updateStatusColor);
     document.querySelectorAll(".type-select").forEach(updateTypeColor);
@@ -889,16 +754,13 @@ async function renderProjectsData(projectsData, monthLocksMap, hasDataMonthsMap)
 }
 
 // ==================================
-// ONLINE & LOCAL SAVE FUNCTIONS (INTEGRATED WITH SYNC QUEUE HOOKS)
+// ONLINE & LOCAL SAVE FUNCTIONS (Optimized Debounce)
 // ==================================
 let localSaveTimeout;
 let apiSaveTimeout;
 
 function saveProjects() {
     saveProjectsLocal();
-
-    const cacheKey = `projects_${currentYear}_${currentMonth}`;
-    AppCache.invalidate(cacheKey);
 
     if (LOCAL_MODE) {
         return;
@@ -921,25 +783,6 @@ function saveProjects() {
             }
         });
 
-        const updatedPayload = {
-            projects: projectsData,
-            lockedMonths: monthLocks,
-            hasDataMonths: cachedHasDataMonths
-        };
-        AppCache.set(cacheKey, updatedPayload);
-        projectsMemoryCache[cacheKey] = updatedPayload;
-
-        if (window.KBOfflineController && window.KBOfflineController.isOfflineMode() && window.KBSyncQueue) {
-            await window.KBSyncQueue.addQueueItem(
-                'UPDATE_PROJECT',
-                `/api/projects?year=${saveYear}&month=${monthMap[saveMonth]}`,
-                'POST',
-                projectsData
-            );
-            console.log("[OFFLINE] Changes captured in local pending queue.");
-            return;
-        }
-
         try {
             const response = await fetch(
                 `/api/projects?year=${saveYear}&month=${monthMap[saveMonth]}`,
@@ -950,11 +793,13 @@ function saveProjects() {
                 }
             );
 
-            if (response.status === 429) {
-                window.isQuotaExceeded = true;
-            }
-
             if (response.ok) {
+                const resData = await response.json();
+                if (resData.hasDataMonths) {
+                    cachedHasDataMonths = resData.hasDataMonths;
+                    await updateMonthHasDataUI(cachedHasDataMonths);
+                }
+
                 localStorage.setItem(
                     `projects_${saveYear}_${saveMonth}`,
                     JSON.stringify(projectsData)
@@ -962,25 +807,9 @@ function saveProjects() {
                 recordActivity("Saved Projects", `Year: ${saveYear}, Month: ${saveMonth.toUpperCase()}`);
             } else {
                 console.error("[SAVE] API error:", response.status);
-                if (window.KBSyncQueue) {
-                    await window.KBSyncQueue.addQueueItem(
-                        'UPDATE_PROJECT',
-                        `/api/projects?year=${saveYear}&month=${monthMap[saveMonth]}`,
-                        'POST',
-                        projectsData
-                    );
-                }
             }
         } catch (e) {
-            console.error("[SAVE] Error saving projects, adding to pending queue:", e);
-            if (window.KBSyncQueue) {
-                await window.KBSyncQueue.addQueueItem(
-                    'UPDATE_PROJECT',
-                    `/api/projects?year=${saveYear}&month=${monthMap[saveMonth]}`,
-                    'POST',
-                    projectsData
-                );
-            }
+            console.error("[SAVE] Error saving projects to Cloudflare backend:", e);
         }
     }, 1000);
 }
@@ -1060,48 +889,47 @@ function updateCurrentMonthHasData() {
 
     if (!LOCAL_MODE) {
         cachedHasDataMonths[currentMonth] = hasData;
-        const cacheKey = `projects_${currentYear}_${currentMonth}`;
-        const cached = AppCache.get(cacheKey) || projectsMemoryCache[cacheKey];
-        if (cached) {
-            cached.hasDataMonths = cachedHasDataMonths;
-        }
     }
 }
 
+// 🛠️ INAYOS NA UPDATE MONTH HAS DATA UI (HINDI NA NAKADEPENDE SA STALE LOCALSTORAGE SA CLOUD MODE)
 async function updateMonthHasDataUI(hasDataMonths = null) {
+    const months = hasDataMonths ?? cachedHasDataMonths ?? {};
+
     document.querySelectorAll(".month-btn").forEach(btn => {
         const monthName = btn.dataset.month;
-        const key = `projects_${currentYear}_${monthName}`;
         let hasData = false;
 
-        const saved = localStorage.getItem(key);
-        if (saved) {
-            try {
-                const projects = JSON.parse(saved);
-                hasData = projects.some(data => 
-                    (data.coupleName && data.coupleName.trim() !== "") ||
-                    (data.status && data.status !== "PLANNED") ||
-                    (data.type && data.type !== "NOT SET" && data.type !== "") ||
-                    (data.rawFiles && data.rawFiles.trim() !== "") ||
-                    (data.drone && data.drone !== "NO DRONE") ||
-                    (data.instruction && data.instruction.trim() !== "") ||
-                    (data.concerns && data.concerns.trim() !== "") ||
-                    (data.watchLink && data.watchLink.trim() !== "") ||
-                    (data.filesLink && data.filesLink.trim() !== "") ||
-                    (data.song1 && (data.song1.title.trim() || data.song1.link.trim() || data.song1.status || data.song1.notes.trim())) ||
-                    (data.song2 && (data.song2.title.trim() || data.song2.link.trim() || data.song2.status || data.song2.notes.trim())) ||
-                    (data.song3 && (data.song3.title.trim() || data.song3.link.trim() || data.song3.status || data.song3.notes.trim())) ||
-                    (data.teaserSong && (data.teaserSong.title.trim() || data.teaserSong.link.trim() || data.teaserSong.status || data.teaserSong.notes.trim())) ||
-                    (data.progress && data.progress > 0)
-                );
-            } catch (err) {
-                console.error(err);
+        if (LOCAL_MODE) {
+            // Local mode: Check localStorage
+            const key = `projects_${currentYear}_${monthName}`;
+            const saved = localStorage.getItem(key);
+            if (saved) {
+                try {
+                    const projects = JSON.parse(saved);
+                    hasData = projects.some(data => 
+                        (data.coupleName && data.coupleName.trim() !== "") ||
+                        (data.status && data.status !== "PLANNED") ||
+                        (data.type && data.type !== "NOT SET" && data.type !== "") ||
+                        (data.rawFiles && data.rawFiles.trim() !== "") ||
+                        (data.drone && data.drone !== "NO DRONE") ||
+                        (data.instruction && data.instruction.trim() !== "") ||
+                        (data.concerns && data.concerns.trim() !== "") ||
+                        (data.watchLink && data.watchLink.trim() !== "") ||
+                        (data.filesLink && data.filesLink.trim() !== "") ||
+                        (data.song1 && (data.song1.title.trim() || data.song1.link.trim() || data.song1.status || data.song1.notes.trim())) ||
+                        (data.song2 && (data.song2.title.trim() || data.song2.link.trim() || data.song2.status || data.song2.notes.trim())) ||
+                        (data.song3 && (data.song3.title.trim() || data.song3.link.trim() || data.song3.status || data.song3.notes.trim())) ||
+                        (data.teaserSong && (data.teaserSong.title.trim() || data.teaserSong.link.trim() || data.teaserSong.status || data.teaserSong.notes.trim())) ||
+                        (data.progress && data.progress > 0)
+                    );
+                } catch (err) {
+                    console.error(err);
+                }
             }
-        }
-
-        const months = hasDataMonths ?? cachedHasDataMonths ?? {};
-        if (!LOCAL_MODE && months[monthName] === true) {
-            hasData = true;
+        } else {
+            // Cloud Mode: Strictly galing sa server database response (hasDataMonths)
+            hasData = !!months[monthName];
         }
 
         if (monthName === currentMonth && monthHasData()) {
@@ -1193,8 +1021,176 @@ function updateMonthLockUI() {
     setMonthEditable(!isMonthLocked());
 }
 
+/* ==========================================
+   SETTINGS & DATABASE MANAGEMENT HELPERS
+================================== */
+window.refreshMonthIndicators = async function(year = currentYear) {
+    if (!LOCAL_MODE) {
+        try {
+            const res = await fetch(`/api/projects?year=${year}&t=${Date.now()}`, { cache: "no-store" });
+            if (res.ok) {
+                const data = await res.json();
+                cachedHasDataMonths = data.hasDataMonths || {};
+            }
+        } catch (e) {
+            console.error("Error refreshing month indicators:", e);
+        }
+    }
+    await updateMonthHasDataUI(cachedHasDataMonths);
+};
+
+window.handleResetMonthAction = async function(year, monthName) {
+    const key = `projects_${year}_${monthName}`;
+    localStorage.removeItem(key);
+    
+    if (cachedHasDataMonths) {
+        cachedHasDataMonths[monthName] = false;
+    }
+
+    if (!LOCAL_MODE) {
+        try {
+            const res = await fetch(`/api/reset-month`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ year: Number(year), month: monthMap[monthName] })
+            });
+            if (res.ok) {
+                const data = await res.json();
+                if (data.hasDataMonths) {
+                    cachedHasDataMonths = data.hasDataMonths;
+                }
+            }
+        } catch (e) {
+            console.error("API Reset Month error:", e);
+        }
+    }
+
+    if (String(year) === String(currentYear)) {
+        if (monthName === currentMonth) {
+            clearProjectTable();
+        }
+        await window.refreshMonthIndicators(year);
+    }
+    updateCurrentMonthHasData();
+};
+
+window.handleResetYearAction = async function(year) {
+    monthNames.forEach(m => {
+        localStorage.removeItem(`projects_${year}_${m}`);
+    });
+    cachedHasDataMonths = {};
+
+    if (!LOCAL_MODE) {
+        try {
+            const res = await fetch(`/api/reset-year`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ year: Number(year) })
+            });
+            if (res.ok) {
+                const data = await res.json();
+                if (data.hasDataMonths) {
+                    cachedHasDataMonths = data.hasDataMonths;
+                }
+            }
+        } catch (e) {
+            console.error("API Reset Year error:", e);
+        }
+    }
+
+    if (String(year) === String(currentYear)) {
+        clearProjectTable();
+        await window.refreshMonthIndicators(year);
+    }
+    updateCurrentMonthHasData();
+};
+
+window.handleDeleteEverythingAction = async function() {
+    Object.keys(localStorage).forEach(k => {
+        if (k.startsWith("projects_") || k === "projects") {
+            localStorage.removeItem(k);
+        }
+    });
+    cachedHasDataMonths = {};
+    monthLocks = {};
+
+    if (!LOCAL_MODE) {
+        try {
+            // 🛠️ INAYOS: Ginamit ang tamang endpoint na /api/delete-all
+            const res = await fetch(`/api/delete-all`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" }
+            });
+            if (res.ok) {
+                const data = await res.json();
+                if (data.hasDataMonths) {
+                    cachedHasDataMonths = data.hasDataMonths;
+                }
+            }
+        } catch (e) {
+            console.error("API Delete Everything error:", e);
+        }
+    }
+
+    clearProjectTable();
+    await window.refreshMonthIndicators(currentYear);
+    updateCurrentMonthHasData();
+};
+
+window.handleBackupDatabase = function() {
+    const backupData = {};
+    Object.keys(localStorage).forEach(k => {
+        if (k.startsWith("projects_") || k.startsWith("kb_")) {
+            backupData[k] = localStorage.getItem(k);
+        }
+    });
+
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupData, null, 2));
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute("href", dataStr);
+    downloadAnchor.setAttribute("download", `KBHFILMS_Backup_${new Date().toISOString().slice(0,10)}.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+};
+
+window.handleRestoreDatabase = async function(jsonData) {
+    try {
+        const parsed = JSON.parse(jsonData);
+        Object.keys(parsed).forEach(k => {
+            localStorage.setItem(k, parsed[k]);
+        });
+
+        if (!LOCAL_MODE) {
+            for (const key of Object.keys(parsed)) {
+                if (key.startsWith("projects_")) {
+                    const parts = key.replace("projects_", "").split("_");
+                    const y = parts[0];
+                    const mName = parts[1];
+                    const mNum = monthMap[mName];
+                    const projects = JSON.parse(parsed[key]);
+
+                    if (y && mNum) {
+                        await fetch(`/api/projects?year=${y}&month=${mNum}`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify(projects)
+                        });
+                    }
+                }
+            }
+        }
+
+        await loadProjects();
+        alert("Database restored successfully!");
+    } catch (err) {
+        console.error("Restore failed:", err);
+        alert("Invalid backup file format.");
+    }
+};
+
 /* ==================================
-    UI HELPERS
+   UI HELPERS
 ================================== */
 function updateStatusColor(select) {
     if (!select) return;
@@ -1319,7 +1315,7 @@ function updateSongStatusColor(select) {
 }
 
 /* ==================================
-    MONTH RIGHT-CLICK MENU (ADMIN)
+   MONTH RIGHT-CLICK MENU (ADMIN)
 ================================== */
 const monthContextMenu = document.getElementById("monthContextMenu");
 
@@ -1328,27 +1324,14 @@ async function saveMonthLock(year, monthName, locked) {
 
     const monthNumber = monthMap[monthName];
 
-    AppCache.invalidate(`projects_${year}_${monthName}`);
-
-    if (window.KBOfflineController && window.KBOfflineController.isOfflineMode() && window.KBSyncQueue) {
-        await window.KBSyncQueue.addQueueItem('MONTH_LOCK', '/api/month-lock', 'POST', { year: year, month: monthNumber, locked: locked });
-        return;
-    }
-
     try {
-        const resp = await fetch("/api/month-lock", {
+        await fetch("/api/month-lock", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ year: year, month: monthNumber, locked: locked })
         });
-        if (resp.status === 429) {
-            window.isQuotaExceeded = true;
-        }
     } catch (err) {
         console.error("[MONTH LOCK ERROR]", err);
-        if (window.KBSyncQueue) {
-            await window.KBSyncQueue.addQueueItem('MONTH_LOCK', '/api/month-lock', 'POST', { year: year, month: monthNumber, locked: locked });
-        }
     }
 }
 
@@ -1429,7 +1412,7 @@ document.getElementById("unlockMonthBtn")?.addEventListener("click", async () =>
 });
 
 /* ==================================
-    WATCH & MODALS EVENTS
+   WATCH & MODALS EVENTS
 ================================== */
 let activeWatchButton = null;
 let activeFilesButton = null;
@@ -1770,7 +1753,7 @@ commentsTextarea?.addEventListener("input", () => {
 });
 
 /* ==================================
-    WATCH PLAYER WINDOW DRAG & CONTROLS
+   WATCH PLAYER WINDOW DRAG & CONTROLS
 ================================== */
 const watchPlayer = document.getElementById("watchBox");
 const watchHeader = document.getElementById("watchHeader");
@@ -1899,21 +1882,9 @@ if (cancelLogout) {
 }
 
 if (confirmLogout) {
-    confirmLogout.addEventListener("click", async () => {
-        if (window.KBHybridAuth && typeof window.KBHybridAuth.canSafelyLogout === 'function') {
-            const safe = await window.KBHybridAuth.canSafelyLogout();
-            if (!safe) {
-                if (!confirm("You have unsynchronized offline changes. Logging out may risk pending data. Proceed anyway?")) {
-                    logoutConfirm?.classList.remove("show");
-                    return;
-                }
-            }
-            await window.KBHybridAuth.clearSession();
-        }
-
+    confirmLogout.addEventListener("click", () => {
         recordActivity("Logged Out", "User signed out");
         localStorage.removeItem("currentUser");
-        AppCache.invalidate();
         window.location.href = "../login.html";
     });
 }
@@ -1925,7 +1896,7 @@ document.addEventListener("click", (e) => {
 });
 
 /* ==================================
-    SOUNDS & MUSIC
+   SOUNDS & MUSIC
 ================================== */
 const clickSound = new Audio("../assets/sounds/click.mp3");
 clickSound.volume = 0.2;
@@ -2066,7 +2037,7 @@ volumeIcon?.addEventListener("click", () => {
 });
 
 /* ==================================
-    SONG LINK STYLE & DRONE AUTOCOMPLETE (PHASE 11: DEBOUNCE APPLIED)
+   SONG LINK STYLE & DRONE AUTOCOMPLETE
 ================================== */
 function updateSongLinkStyle(input) {
     if (!input) return;
@@ -2103,43 +2074,37 @@ document.querySelectorAll(".drone-cell").forEach(cell => {
 
     updateDroneColor(select);
 
-    let droneDebounceTimer = null;
-
     search.addEventListener("input", () => {
-        clearTimeout(droneDebounceTimer);
-        
-        droneDebounceTimer = setTimeout(() => {
-            const keyword = search.value.trim().toUpperCase();
-            suggestions.innerHTML = "";
+        const keyword = search.value.trim().toUpperCase();
+        suggestions.innerHTML = "";
 
-            if (!keyword) {
+        if (!keyword) {
+            suggestions.classList.remove("show");
+            return;
+        }
+
+        [...select.options].forEach(option => {
+            if (option.value === "NO DRONE" || !option.text.toUpperCase().includes(keyword)) return;
+
+            const item = document.createElement("div");
+            item.className = "drone-suggestion";
+            item.innerHTML = option.text.replace(new RegExp(keyword, "ig"), match => `<b>${match}</b>`);
+
+            item.addEventListener("click", () => {
+                select.value = option.value;
+                updateDroneColor(select);
+                search.value = "";
+                suggestions.innerHTML = "";
                 suggestions.classList.remove("show");
-                return;
-            }
-
-            [...select.options].forEach(option => {
-                if (option.value === "NO DRONE" || !option.text.toUpperCase().includes(keyword)) return;
-
-                const item = document.createElement("div");
-                item.className = "drone-suggestion";
-                item.innerHTML = option.text.replace(new RegExp(keyword, "ig"), match => `<b>${match}</b>`);
-
-                item.addEventListener("click", () => {
-                    select.value = option.value;
-                    updateDroneColor(select);
-                    search.value = "";
-                    suggestions.innerHTML = "";
-                    suggestions.classList.remove("show");
-                    saveProjects();
-                    updateCurrentMonthHasData();
-                    recordActivity("Selected Drone via Search", `Drone -> ${option.value}`);
-                });
-
-                suggestions.appendChild(item);
+                saveProjects();
+                updateCurrentMonthHasData();
+                recordActivity("Selected Drone via Search", `Drone -> ${option.value}`);
             });
 
-            suggestions.classList.toggle("show", suggestions.children.length > 0);
-        }, 300);
+            suggestions.appendChild(item);
+        });
+
+        suggestions.classList.toggle("show", suggestions.children.length > 0);
     });
 
     select.addEventListener("change", () => {
@@ -2165,7 +2130,7 @@ document.addEventListener("dblclick", (e) => {
 });
 
 /* ==================================
-    TIMELINE & PROGRESS SLIDER
+   TIMELINE & PROGRESS SLIDER
 ================================== */
 function updateTimelineProgress() {
     document.querySelectorAll(".project-table tbody tr").forEach(row => {

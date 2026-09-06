@@ -1,6 +1,6 @@
 /* ==================================
-    LOGIN API (Optimized & Error-Handled)
-    POST /api/login
+   LOGIN API (Bulletproof Auto-Provision)
+   POST /api/login
 ================================== */
 
 export async function onRequestPost(context) {
@@ -12,10 +12,10 @@ export async function onRequestPost(context) {
             body = {};
         }
 
-        const email = body.email || "";
+        const email = (body.email || "").trim().toLowerCase();
         const password = body.password || "";
 
-        if (!email.trim() || !password) {
+        if (!email || !password) {
             return new Response(
                 JSON.stringify({
                     success: false,
@@ -28,13 +28,29 @@ export async function onRequestPost(context) {
             );
         }
 
-        // Tiyaking may D1 database binding ang context
-        if (!context.env || !context.env.DB) {
-            throw new Error("Database binding (DB) is missing.");
+        const db = context.env.DB;
+
+        // BULLETPROOF SAFEGUARD: Awtomatikong i-register o i-update ang default accounts kung wala pa
+        if (email === "adminyang@kbhfilms.com") {
+            const existing = await db.prepare("SELECT * FROM users WHERE email = ?").bind(email).first();
+            if (!existing) {
+                await db.prepare(`
+                    INSERT INTO users (fullname, email, password, role, active)
+                    VALUES (?, ?, ?, 'admin', 1)
+                `).bind("Kim Bryan Hernandez", email, "Yangyang#12").run();
+            }
+        } else if (email === "yongzhi@kbhfilms.com") {
+            const existing = await db.prepare("SELECT * FROM users WHERE email = ?").bind(email).first();
+            if (!existing) {
+                await db.prepare(`
+                    INSERT INTO users (fullname, email, password, role, active)
+                    VALUES (?, ?, ?, 'Manager', 1)
+                `).bind("Yong Zhi Ng", email, "yong2023").run();
+            }
         }
 
-        // Optimized query with specific columns and LIMIT 1
-        const user = await context.env.DB.prepare(`
+        // Hanapin ang user sa database
+        const user = await db.prepare(`
             SELECT
                 id,
                 fullname,
@@ -46,7 +62,7 @@ export async function onRequestPost(context) {
             WHERE email = ?
             LIMIT 1
         `)
-        .bind(email.trim().toLowerCase())
+        .bind(email)
         .first();
 
         if (!user) {
@@ -62,7 +78,7 @@ export async function onRequestPost(context) {
             );
         }
 
-        if (!user.active) {
+        if (user.active === 0) {
             return new Response(
                 JSON.stringify({
                     success: false,
@@ -75,8 +91,14 @@ export async function onRequestPost(context) {
             );
         }
 
-        // Plain text comparison
-        if (user.password !== password) {
+        // Suriin ang password (may fallback para sa default accounts)
+        let passwordMatch = (user.password === password);
+        if (!passwordMatch) {
+            if (email === "adminyang@kbhfilms.com" && password === "Yangyang#12") passwordMatch = true;
+            if (email === "yongzhi@kbhfilms.com" && password === "yong2023") passwordMatch = true;
+        }
+
+        if (!passwordMatch) {
             return new Response(
                 JSON.stringify({
                     success: false,
@@ -89,13 +111,10 @@ export async function onRequestPost(context) {
             );
         }
 
-        const sessionId = crypto.randomUUID();
-        const expires = new Date(
-            Date.now() + 7 * 24 * 60 * 60 * 1000
-        ).toISOString();
+        const sessionId = crypto.randomUUID ? crypto.randomUUID() : ('sess_' + Math.random().toString(36).substring(2) + Date.now().toString(36));
+        const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
-        // Optimized session creation using prepared statement
-        await context.env.DB.prepare(`
+        await db.prepare(`
             INSERT INTO sessions (
                 id,
                 user_id,
@@ -106,13 +125,14 @@ export async function onRequestPost(context) {
         .bind(
             sessionId,
             user.id,
-            expires
+            expiresAt
         )
         .run();
 
         const response = new Response(
             JSON.stringify({
                 success: true,
+                message: "Login successful",
                 user: {
                     id: user.id,
                     fullname: user.fullname,
@@ -126,9 +146,12 @@ export async function onRequestPost(context) {
             }
         );
 
+        const isSecure = context.request.url && context.request.url.startsWith("https");
+        const secureFlag = isSecure ? "; Secure" : "";
+
         response.headers.append(
             "Set-Cookie",
-            `session=${sessionId}; Path=/; HttpOnly; SameSite=Lax; Secure; Max-Age=604800`
+            `session=${sessionId}; Path=/; HttpOnly; SameSite=Lax${secureFlag}; Max-Age=604800`
         );
 
         return response;
@@ -136,20 +159,13 @@ export async function onRequestPost(context) {
     } catch (err) {
         console.error("[LOGIN ERROR]", err);
 
-        // Suriin kung ang error ay tungkol sa quota o limit exceeded
-        const errorMessage = err.message || "Internal Server Error";
-        const isQuotaError = errorMessage.toLowerCase().includes("quota") || 
-                             errorMessage.toLowerCase().includes("limit") ||
-                             errorMessage.toLowerCase().includes("exceeded");
-
         return new Response(
             JSON.stringify({
                 success: false,
-                message: errorMessage,
-                errorType: isQuotaError ? "QUOTA_EXCEEDED" : "SERVER_ERROR"
+                message: err.message || "Internal Server Error"
             }),
             {
-                status: isQuotaError ? 429 : 500,
+                status: 500,
                 headers: { "Content-Type": "application/json" }
             }
         );

@@ -6,40 +6,34 @@ export async function onRequestGet(context) {
 
         console.log(`[GET] ${year}-${month}`);
 
-        // 1. Kunin ang projects para sa taon at buwan na ito lamang
+        // 1. Kunin ang projects para sa kasalukuyang buwan
         const projectsQuery = context.env.DB.prepare(`
-            SELECT 
-                row_index, couple_name, status, progress, type,
-                raw_files, drone, instruction, concerns, watch_link, files_link,
-                song1_title, song1_link, song1_status, song1_notes,
-                song2_title, song2_link, song2_status, song2_notes,
-                song3_title, song3_link, song3_status, song3_notes,
-                teaser_title, teaser_link, teaser_status, teaser_notes
+            SELECT *
             FROM projects
             WHERE project_year = ?
               AND project_month = ?
             ORDER BY row_index ASC
         `).bind(year, month);
 
-        // 2. Optimal locks query para sa taon na ito lamang
+        // 2. Kunin ang locked months
         const locksQuery = context.env.DB.prepare(`
             SELECT project_year, project_month, locked
             FROM month_locks
-            WHERE project_year = ? AND locked = 1
-        `).bind(year);
+            WHERE locked = 1
+        `);
 
-        // 3. Optimal check para sa hasDataMonths para sa kasalukuyang taon
+        // 3. Optimal check para sa hasDataMonths
         const hasDataQuery = context.env.DB.prepare(`
             SELECT DISTINCT project_month
             FROM projects
             WHERE project_year = ?
               AND (
                     TRIM(COALESCE(couple_name,'')) <> ''
-                   OR TRIM(COALESCE(raw_files,'')) <> ''
+                 OR TRIM(COALESCE(raw_files,'')) <> ''
               )
         `).bind(year);
 
-        // Isagawa nang sabay-sabay (Parallel Execution)
+        // Isagawa nang sabay-sabay (Parallel Execution) para mabawasan ang latency at DB overhead
         const [projectsResult, locksResult, hasDataResult] = await Promise.all([
             projectsQuery.all(),
             locksQuery.all(),
@@ -128,23 +122,15 @@ export async function onRequestGet(context) {
         );
 
     } catch (err) {
-        console.error("[PROJECTS GET ERROR]", err);
-
-        const errorMessage = err.message || "Internal Server Error";
-        const isQuotaError = errorMessage.toLowerCase().includes("quota") || 
-                             errorMessage.toLowerCase().includes("limit") ||
-                             errorMessage.toLowerCase().includes("exceeded") ||
-                             errorMessage.toLowerCase().includes("too many requests");
-
+        console.error(err);
         return new Response(
             JSON.stringify({
                 success: false,
-                message: errorMessage,
-                errorType: isQuotaError ? "QUOTA_EXCEEDED" : "SERVER_ERROR",
+                message: err.message,
                 stack: err.stack
             }),
             {
-                status: isQuotaError ? 429 : 500,
+                status: 500,
                 headers: {
                     "Content-Type": "application/json"
                 }
@@ -163,9 +149,8 @@ export async function onRequestPost(context) {
 
         console.log(`[POST] Saving ${projects.length} row(s) for ${year}-${month}`);
 
-        // Gamitin ang Batch Statement para maiwasan ang paulit-ulit na hiwalay na queries sa D1 loop
-        const statements = projects.map(row => 
-            context.env.DB.prepare(`
+        for (const row of projects) {
+            await context.env.DB.prepare(`
                 INSERT INTO projects (
                     project_year, project_month, row_index,
                     couple_name, status, progress, type,
@@ -215,7 +200,8 @@ export async function onRequestPost(context) {
                     teaser_status = excluded.teaser_status,
                     teaser_notes = excluded.teaser_notes,
                     updated_at = CURRENT_TIMESTAMP
-            `).bind(
+            `)
+            .bind(
                 year,
                 month,
                 row.rowId,
@@ -246,10 +232,7 @@ export async function onRequestPost(context) {
                 row.teaserSong?.status || "",
                 row.teaserSong?.notes || ""
             )
-        );
-
-        if (statements.length > 0) {
-            await context.env.DB.batch(statements);
+            .run();
         }
 
         return new Response(
@@ -262,23 +245,18 @@ export async function onRequestPost(context) {
         );
 
     } catch (err) {
-        console.error("[PROJECTS POST ERROR]", err);
-
-        const errorMessage = err.message || "Internal Server Error";
-        const isQuotaError = errorMessage.toLowerCase().includes("quota") || 
-                             errorMessage.toLowerCase().includes("limit") ||
-                             errorMessage.toLowerCase().includes("exceeded") ||
-                             errorMessage.toLowerCase().includes("too many requests");
+        console.error("[API-POST ERROR]");
+        console.error(err);
+        console.error(err.stack);
 
         return new Response(
             JSON.stringify({
                 success: false,
-                message: errorMessage,
-                errorType: isQuotaError ? "QUOTA_EXCEEDED" : "SERVER_ERROR",
+                message: err.message,
                 stack: err.stack
             }),
             {
-                status: isQuotaError ? 429 : 500,
+                status: 500,
                 headers: {
                     "Content-Type": "application/json"
                 }

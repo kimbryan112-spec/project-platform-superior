@@ -1,0 +1,7 @@
+tunnel: e05f780e-04aa-47cb-84c3-b7a8d3908182
+credentials-file: C:\Users\yang\.cloudflared\e05f780e-04aa-47cb-84c3-b7a8d3908182.json
+
+ingress:
+  - hostname: projectplatformv5.kbhfilms.com
+    service: http://localhost:3000
+  - service: http_status:404

@@ -1,6 +1,6 @@
 // ===============================
 // PROJECT PLATFORM
-// SERVER LOGIN (Offline, API, & Quota Exceeded Supported)
+// SERVER LOGIN (Offline & API Supported)
 // ===============================
 
 const loginForm = document.getElementById("loginForm");
@@ -22,11 +22,7 @@ if (loginForm) {
             errorText.textContent = "";
         }
 
-        // I-reset muna ang global quota flag tuwing susubok mag-login
-        window.isQuotaExceeded = false;
-        triggerStatusUpdate();
-
-        // 1. OFFLINE / LOCAL TESTING FALLBACK
+        // OFFLINE / LOCAL TESTING FALLBACK (Para sa Localhost)
         if (window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost") {
             if (email === "adminyang@kbhfilms.com" && password === "Yangyang#12") {
                 const offlineUser = {
@@ -50,10 +46,15 @@ if (loginForm) {
                 localStorage.setItem("currentUser", JSON.stringify(offlineUser));
                 window.location.href = "pages/dashboard.html"; 
                 return;
+            } else {
+                if (errorText) {
+                    errorText.textContent = "Invalid email or password.";
+                }
+                return;
             }
         }
 
-        // 2. ONLINE CLOUDFLARE / PRODUCTION API REQUEST WITH HYBRID FALLBACK
+        // ONLINE / CLOUDFLARE API REQUEST
         try {
             const response = await fetch("/api/login", {
                 method: "POST",
@@ -65,22 +66,7 @@ if (loginForm) {
 
             const data = await response.json();
 
-            // Sakaling ma-exceed ang API limits (429) o QUOTA_EXCEEDED type
-            if (response.status === 429 || data.errorType === "QUOTA_EXCEEDED") {
-                window.isQuotaExceeded = true;
-                triggerStatusUpdate();
-            }
-
             if (!response.ok || !data.success) {
-                // Kung nag-fail ang API pero baka sakaling offline credentials ang gamit, subukan ang Hybrid Auth
-                if (window.KBHybridAuth) {
-                    const offlineLoginResult = await window.KBHybridAuth.verifyOfflineLogin(email, password);
-                    if (offlineLoginResult.success) {
-                        handleSuccessfulLogin(offlineLoginResult.user);
-                        return;
-                    }
-                }
-
                 if (errorText) {
                     errorText.textContent = data.message || "Invalid email or password.";
                 }
@@ -88,59 +74,28 @@ if (loginForm) {
             }
 
             const loggedInUser = data.user || {};
-            handleSuccessfulLogin(loggedInUser);
-
-        } catch (err) {
-            console.warn("API login failed (Likely offline). Attempting Hybrid/Offline Authentication...", err);
-
-            // 3. OFFLINE FALLBACK: Kapag walang internet o nag-timeout ang fetch
-            if (window.KBHybridAuth) {
-                try {
-                    const offlineLoginResult = await window.KBHybridAuth.verifyOfflineLogin(email, password);
-                    if (offlineLoginResult.success) {
-                        handleSuccessfulLogin(offlineLoginResult.user);
-                        return;
-                    }
-                } catch (offlineErr) {
-                    console.error("Offline login error:", offlineErr);
-                }
+            if (!loggedInUser.name && loggedInUser.fullname) {
+                loggedInUser.name = loggedInUser.fullname;
             }
 
+            localStorage.setItem(
+                "currentUser",
+                JSON.stringify(loggedInUser)
+            );
+
+            if (loggedInUser.role === "admin" || loggedInUser.role === "Admin") {
+                window.location.href = "pages/admin.html";
+            } else {
+                window.location.href = "pages/dashboard.html";
+            }
+
+        } catch (err) {
+            console.error("Login error:", err);
             if (errorText) {
-                errorText.textContent = "You are offline and no local credentials matched. Please check your connection.";
+                errorText.textContent = "A connection error occurred. Please try again.";
             }
         }
     });
-}
-
-// Helper function para i-refresh ang UI status indicator
-function triggerStatusUpdate() {
-    window.dispatchEvent(new Event('online')); // Mag-a-update ito batay sa state sa login.html
-}
-
-// Helper function para sa redirect pagkatapos mag-login
-function handleSuccessfulLogin(loggedInUser) {
-    if (!loggedInUser.name && loggedInUser.fullname) {
-        loggedInUser.name = loggedInUser.fullname;
-    } else if (!loggedInUser.name && loggedInUser.email === "yongzhi@kbhfilms.com") {
-        loggedInUser.name = "Yong Zhi Ng";
-    }
-
-    if (loggedInUser.role === "manager") {
-        loggedInUser.role = "Manager";
-    }
-
-    localStorage.setItem(
-        "currentUser",
-        JSON.stringify(loggedInUser)
-    );
-
-    const userRole = (loggedInUser.role || "").toLowerCase();
-    if (userRole === "admin") {
-        window.location.href = "pages/admin.html";
-    } else {
-        window.location.href = "pages/dashboard.html";
-    }
 }
 
 // ===============================

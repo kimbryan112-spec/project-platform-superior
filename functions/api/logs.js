@@ -1,6 +1,16 @@
-export async function onRequestGet(context) {
+export async function onRequestPost(context) {
     try {
         const { request, env } = context;
+        
+        let body = {};
+        try {
+            body = await request.json();
+        } catch (e) {
+            // Kung sakaling hindi valid o walang laman ang JSON body
+            body = {};
+        }
+        
+        const { user_name, action, details, browser, os, device } = body;
 
         if (!env.DB) {
             return new Response(JSON.stringify({ error: "Database not connected" }), {
@@ -9,25 +19,45 @@ export async function onRequestGet(context) {
             });
         }
 
-        const url = new URL(request.url);
-        const isCountOnly = url.searchParams.get("count") === "true";
+        await env.DB.prepare(`
+            INSERT INTO activity_logs (user_name, action, details, browser, os, device)
+            VALUES (?, ?, ?, ?, ?, ?)
+        `).bind(
+            user_name || "Admin/User",
+            action || "Unknown Action",
+            details || "",
+            browser || "Unknown Browser",
+            os || "Unknown OS",
+            device || "Desktop"
+        ).run();
 
-        if (isCountOnly) {
-            const { results } = await env.DB.prepare(`
-                SELECT COUNT(*) as total FROM activity_logs
-            `).all();
-            return new Response(JSON.stringify({ count: results[0]?.total || 0 }), {
-                status: 200,
-                headers: { "Content-Type": "application/json", "Cache-Control": "no-store" }
+        return new Response(JSON.stringify({ success: true }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" }
+        });
+    } catch (err) {
+        return new Response(JSON.stringify({ error: err.message }), {
+            status: 500,
+            headers: { "Content-Type": "application/json" }
+        });
+    }
+}
+
+export async function onRequestGet(context) {
+    try {
+        const { env } = context;
+
+        if (!env.DB) {
+            return new Response(JSON.stringify({ error: "Database not connected" }), {
+                status: 500,
+                headers: { "Content-Type": "application/json" }
             });
         }
 
-        const limit = parseInt(url.searchParams.get("limit")) || 20;
-        const offset = parseInt(url.searchParams.get("offset")) || 0;
-
+        // Kunin ang huling 50 logs nang mabilis at episyente
         const { results } = await env.DB.prepare(`
-            SELECT * FROM activity_logs ORDER BY created_at DESC LIMIT ? OFFSET ?
-        `).bind(limit, offset).all();
+            SELECT * FROM activity_logs ORDER BY created_at DESC LIMIT 50
+        `).all();
 
         return new Response(JSON.stringify({ logs: results || [] }), {
             status: 200,
@@ -37,20 +67,8 @@ export async function onRequestGet(context) {
             }
         });
     } catch (err) {
-        console.error("[LOGS GET ERROR]", err);
-
-        const errorMessage = err.message || "Internal Server Error";
-        const isQuotaError = errorMessage.toLowerCase().includes("quota") || 
-                             errorMessage.toLowerCase().includes("limit") ||
-                             errorMessage.toLowerCase().includes("exceeded") ||
-                             errorMessage.toLowerCase().includes("too many requests");
-
-        return new Response(JSON.stringify({ 
-            success: false,
-            error: errorMessage,
-            errorType: isQuotaError ? "QUOTA_EXCEEDED" : "SERVER_ERROR"
-        }), {
-            status: isQuotaError ? 429 : 500,
+        return new Response(JSON.stringify({ error: err.message }), {
+            status: 500,
             headers: { "Content-Type": "application/json" }
         });
     }

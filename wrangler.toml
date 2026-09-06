@@ -1,9 +1,0 @@
-name = "wedding-dashboard-api"
-compatibility_date = "2026-01-01"
-
-pages_build_output_dir = "."
-
-[[d1_databases]]
-binding = "DB"
-database_name = "wedding-db"
-database_id = "d5da608f-9f23-4bd7-a500-29235a6e063a"

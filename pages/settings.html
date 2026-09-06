@@ -6,35 +6,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Project Platform - Settings</title>
     <link rel="stylesheet" href="../css/style.css">
-    <style>
-        /* System Status Indicator Styling */
-        .system-status-indicator {
-            padding: 6px 12px;
-            font-size: 0.8rem;
-            border-radius: 6px;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            font-weight: 500;
-            transition: all 0.3s ease;
-            vertical-align: middle;
-            margin-left: 10px;
-        }
-        .status-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            display: inline-block;
-        }
-        .status-online { color: #065f46; background-color: #ecfdf5; border: 1px solid #a7f3d0; }
-        .status-online .status-dot { background-color: #10b981; box-shadow: 0 0 6px #10b981; }
-        
-        .status-offline { color: #78350f; background-color: #fffbeb; border: 1px solid #fde68a; }
-        .status-offline .status-dot { background-color: #f59e0b; }
-
-        .status-exceeded { color: #7f1d1d; background-color: #fef2f2; border: 1px solid #fecaca; }
-        .status-exceeded .status-dot { background-color: #ef4444; box-shadow: 0 0 6px #ef4444; }
-    </style>
 </head>
 
 <body>
@@ -111,11 +82,6 @@
                         <span style="font-size:15px; color:#777; font-weight:500;">
                             Database Management & Maintenance
                         </span>
-                        <!-- System Status Indicator (Naka-embed sa Topbar / Header) -->
-                        <div id="systemStatusBanner" class="system-status-indicator status-online">
-                            <span class="status-dot"></span>
-                            <span id="systemStatusText">System Online (Cloud Connected)</span>
-                        </div>
                     </h2>
                 </div>
             </div>
@@ -239,7 +205,7 @@
                 <!-- RESTORE -->
                 <div class="settings-card">
                     <div class="settings-title">
-                        <h2>📂 Restore Database</h2>
+                        <h2>📂 Restore Backup</h2>
                         <p>Restore Cloudflare D1 from JSON file.</p>
                     </div>
 
@@ -284,7 +250,7 @@ if (currentUser.role !== "admin" && currentUser.role !== "Admin") {
     window.location.href = "dashboard.html";
 }
 
-// Script para mag-populate ng Years mula 2023 hanggang 2031 para sa lahat ng dropdowns sa settings at mag-update ng System Status Indicator
+// Script para mag-populate ng Years mula 2023 hanggang 2031 para sa lahat ng dropdowns sa settings
 document.addEventListener("DOMContentLoaded", () => {
     const yearSelects = [
         document.getElementById("yearSelect"),
@@ -313,47 +279,9 @@ document.addEventListener("DOMContentLoaded", () => {
             selectElement.appendChild(option);
         }
     });
-
-    // System Status Indicator Dynamic Checker
-    const banner = document.getElementById("systemStatusBanner");
-    const text = document.getElementById("systemStatusText");
-
-    function updateSettingsStatus() {
-        if (!banner || !text) return;
-        const isOffline = !navigator.onLine;
-        const quotaExceeded = window.isQuotaExceeded || false;
-
-        banner.className = "system-status-indicator";
-
-        if (quotaExceeded) {
-            banner.classList.add("status-exceeded");
-            text.textContent = "API Limit / Quota Exceeded";
-        } else if (isOffline) {
-            banner.classList.add("status-offline");
-            text.textContent = "Local Mode Active (Offline)";
-        } else {
-            banner.classList.add("status-online");
-            text.textContent = "System Online (Cloud Connected)";
-        }
-    }
-
-    window.addEventListener("online", updateSettingsStatus);
-    window.addEventListener("offline", updateSettingsStatus);
-    updateSettingsStatus();
 });
 </script>
 
-<!-- === OFFLINE-FIRST & PRODUCTION MODULES === -->
-<script src="../js/logger.js"></script>
-<script src="../js/error-manager.js"></script>
-<script src="../js/local-db.js"></script>
-<script src="../js/sync-queue.js"></script>
-<script src="../js/conflict-manager.js"></script>
-<script src="../js/sync-engine.js"></script>
-<script src="../js/offline-controller.js"></script>
-<script src="../js/hybrid-auth.js"></script>
-
-<!-- Settings Script -->
 <script src="../js/settings.js"></script>
 
 </body>

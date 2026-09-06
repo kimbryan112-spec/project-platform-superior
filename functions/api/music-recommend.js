@@ -1,23 +1,4 @@
-import { askOpenAI } from "../lib/openai";
-
-// Helper para gumawa ng unique cache key base sa project details
-async function generateCacheKey(project) {
-    const rawString = JSON.stringify({
-        couple: (project.coupleName || "").trim().toLowerCase(),
-        type: (project.type || "").trim().toLowerCase(),
-        status: (project.status || "").trim().toLowerCase(),
-        instruction: (project.instruction || "").trim().toLowerCase(),
-        concerns: (project.concerns || "").trim().toLowerCase(),
-        drone: (project.drone || "NO DRONE").trim().toLowerCase(),
-        rawFiles: (project.rawFiles || "").trim().toLowerCase()
-    });
-    
-    // Gumamit ng SubtleCrypto para sa MD5/SHA-256 hash kung kinakailangan o simpleng string key
-    const msgBuffer = new TextEncoder().encode(rawString);
-    const hashBuffer = await crypto.subtle.digest("SHA-256", msgBuffer);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-}
+import { askOpenAI } from "../../lib/openai.js"; // <-- Ayusin ang path at idagdag ang .js extension
 
 export async function onRequestPost(context) {
     try {
@@ -30,31 +11,6 @@ export async function onRequestPost(context) {
         const apiKey = env.OPENAI_API_KEY;
         if (!apiKey) {
             throw new Error("OPENAI_API_KEY is not configured in Cloudflare environment variables.");
-        }
-
-        // 1. I-check ang Cache kung mayroon nang database (env.DB)
-        const cacheKey = await generateCacheKey(project);
-        let cachedResult = null;
-
-        if (env.DB) {
-            // Siguraduhing may table na music_cache (key TEXT PRIMARY KEY, response TEXT)
-            const cachedRow = await env.DB.prepare(
-                `SELECT response FROM music_cache WHERE cache_key = ?`
-            ).bind(cacheKey).first();
-
-            if (cachedRow && cachedRow.response) {
-                console.log("[AI MUSIC CACHE HIT]", cacheKey);
-                cachedResult = JSON.parse(cachedRow.response);
-                return new Response(
-                    JSON.stringify(cachedResult),
-                    {
-                        headers: { 
-                            "Content-Type": "application/json",
-                            "Cache-Control": "public, max-age=86400"
-                        }
-                    }
-                );
-            }
         }
 
         // Verified Musicbed Catalog Database
@@ -148,28 +104,13 @@ Return ONLY a valid JSON object with this exact structure:
             project.instruction ? "✔ Custom Instructions Applied" : "✔ Standard Flow"
         ];
 
-        const finalResponseData = {
-            success: true,
-            analysis: analysisBadges,
-            songs: verifiedSongs,
-            whyText: aiResult.whyText || `Curated specifically for ${project.coupleName || "this project"} matching professional wedding standards.`
-        };
-
-        // 2. I-save sa cache kung naka-configure ang env.DB
-        if (env.DB) {
-            try {
-                await env.DB.prepare(`
-                    INSERT INTO music_cache (cache_key, response, created_at)
-                    VALUES (?, ?, datetime('now'))
-                    ON CONFLICT(cache_key) DO UPDATE SET response = excluded.response
-                `).bind(cacheKey, JSON.stringify(finalResponseData)).run();
-            } catch (cacheErr) {
-                console.error("[AI MUSIC CACHE SAVE ERROR]", cacheErr);
-            }
-        }
-
         return new Response(
-            JSON.stringify(finalResponseData),
+            JSON.stringify({
+                success: true,
+                analysis: analysisBadges,
+                songs: verifiedSongs,
+                whyText: aiResult.whyText || `Curated specifically for ${project.coupleName || "this project"} matching professional wedding standards.`
+            }),
             {
                 headers: { 
                     "Content-Type": "application/json",
