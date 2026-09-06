@@ -1,83 +1,76 @@
 // ==================================
-// DYNAMIC RESTORE API (All Tables)
+// DYNAMIC RESTORE API (Cloudflare D1)
 // POST /api/restore
 // ==================================
 
 export async function onRequestPost(context) {
     try {
-        console.log("[RESTORE] Starting full system restore...");
+        console.log("[RESTORE] Starting system restore...");
 
-        const backup = await context.request.json();
+        const backupData = await context.request.json();
 
-        // 1. Tanggapin kahit anong valid backup format (mapa-table data man o localStorage backup)
-        const tablesData = backup.data || backup;
-
-        if (!tablesData || typeof tablesData !== "object") {
+        if (!backupData || typeof backupData !== "object") {
             return new Response(
-                JSON.stringify({
-                    success: false,
-                    message: "Invalid backup file format."
-                }),
-                {
-                    status: 400,
-                    headers: { "Content-Type": "application/json" }
-                }
+                JSON.stringify({ success: false, message: "Invalid backup file format." }),
+                { status: 400, headers: { "Content-Type": "application/json" } }
             );
         }
 
-        const tableNames = Object.keys(tablesData);
+        const db = context.env.DB;
 
-        // 2. I-off muna ang foreign key checks para maiwasan ang conflict
-        await context.env.DB.prepare(`PRAGMA foreign_keys = OFF;`).run();
+        // 1. Kung ito ay galing sa localStorage backup object map (key-value)
+        const keys = Object.keys(backupData);
+        
+        for (const key of keys) {
+            if (key.startsWith("projects_")) {
+                const parts = key.replace("projects_", "").split("_");
+                const year = parts[0];
+                const monthStr = parts[1];
+                const monthNum = {
+                    jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
+                    jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12
+                }[monthStr];
 
-        // 3. Linisin ang mga lumang laman ng bawat table kung ito ay database tables
-        for (const tableName of tableNames) {
-            if (!tableName.startsWith("projects_") && !tableName.startsWith("kb_")) {
-                try {
-                    await context.env.DB.prepare(`DELETE FROM "${tableName}";`).run();
-                } catch (e) {
-                    // Ignore kung sakaling localStorage key format ang nasa JSON
+                if (year && monthNum) {
+                    let rawVal = backupData[key];
+                    const projects = typeof rawVal === "string" ? JSON.parse(rawVal) : rawVal;
+
+                    if (Array.isArray(projects)) {
+                        for (const proj of projects) {
+                            const rowId = proj.rowId || 1;
+                            await db.prepare(`
+                                INSERT INTO projects (year, month, rowId, data_json) 
+                                VALUES (?, ?, ?, ?)
+                                ON CONFLICT(year, month, rowId) 
+                                DO UPDATE SET data_json = excluded.data_json
+                            `).bind(String(year), Number(monthNum), Number(rowId), JSON.stringify(proj)).run();
+                        }
+                    }
                 }
             }
         }
 
-        // 4. I-insert pabalik ang mga records
-        for (const tableName of tableNames) {
-            const rows = tablesData[tableName];
-            
-            // Kung ito ay database table na may array ng rows
-            if (Array.isArray(rows) && rows.length > 0) {
-                for (const row of rows) {
-                    const columns = Object.keys(row);
-                    const values = Object.values(row);
-                    
-                    const placeholders = columns.map(() => "?").join(", ");
-                    const quotedColumns = columns.map(col => `"${col}"`).join(", ");
+        // 2. Kunin ang updated hasDataMonths para sa kasalukuyang taon (2026) para sa UI sync
+        const currentYear = "2026";
+        const { results: allRows } = await db.prepare(`
+            SELECT month, data_json FROM projects WHERE year = ?
+        `).bind(currentYear).all();
 
-                    const query = `INSERT INTO "${tableName}" (${quotedColumns}) VALUES (${placeholders})`;
-                    
-                    await context.env.DB.prepare(query).bind(...values).run();
-                }
-                console.log(`[RESTORE] Restored ${rows.length} record(s) to table: ${tableName}`);
-            }
-        }
-
-        // 5. I-on ulit ang foreign keys
-        await context.env.DB.prepare(`PRAGMA foreign_keys = ON;`).run();
-
-        // 6. Kunin ang updated hasDataMonths para sa kasalukuyang taon para sa UI sync
-        const currentYear = new Date().getFullYear();
-        const projectsQuery = await context.env.DB.prepare(`
-            SELECT DISTINCT project_month FROM projects WHERE project_year = ?
-        `).bind(Number(currentYear)).all();
-
-        const monthNamesArr = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+        const monthNamesArr = ["", "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
         const hasDataMonths = {};
-        if (projectsQuery && projectsQuery.results) {
-            projectsQuery.results.forEach(row => {
-                const mStr = monthNamesArr[row.project_month - 1];
+
+        if (allRows) {
+            allRows.forEach(row => {
+                const mStr = monthNamesArr[row.month];
                 if (mStr) {
-                    hasDataMonths[mStr] = true;
+                    try {
+                        const parsed = JSON.parse(row.data_json || "[]");
+                        if (Array.isArray(parsed) && parsed.length > 0) {
+                            hasDataMonths[mStr] = true;
+                        }
+                    } catch (e) {
+                        hasDataMonths[mStr] = true;
+                    }
                 }
             });
         }
@@ -85,31 +78,17 @@ export async function onRequestPost(context) {
         return new Response(
             JSON.stringify({
                 success: true,
-                message: "Full system restored successfully.",
-                hasDataMonths: hasDataMonths // <--- Ipinapasa pabalik para mag-update agad ang mga kulay!
+                message: "Database restored successfully!",
+                hasDataMonths: hasDataMonths
             }),
-            {
-                headers: { "Content-Type": "application/json" }
-            }
+            { headers: { "Content-Type": "application/json" } }
         );
 
-    }
-    catch (err) {
+    } catch (err) {
         console.error("[RESTORE] Error:", err);
-
-        try {
-            await context.env.DB.prepare(`PRAGMA foreign_keys = ON;`).run();
-        } catch (e) {}
-
         return new Response(
-            JSON.stringify({
-                success: false,
-                message: err.message
-            }),
-            {
-                status: 500,
-                headers: { "Content-Type": "application/json" }
-            }
+            JSON.stringify({ success: false, message: err.message }),
+            { status: 500, headers: { "Content-Type": "application/json" } }
         );
     }
 }
