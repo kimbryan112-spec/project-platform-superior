@@ -221,6 +221,56 @@ try {
 }
 
 // ==========================================
+// AUTO-BACKUP SYSTEM (Every 6 Hours)
+// ==========================================
+function runAutoBackup() {
+    const backupDir = path.join(__dirname, 'BACKUP');
+    
+    if (!fs.existsSync(backupDir)) {
+        fs.mkdirSync(backupDir, { recursive: true });
+    }
+
+    const now = new Date();
+    // Gamitin ang PH timezone offset kung kinakailangan o standard ISO date string
+    const dateStr = now.toISOString().split('T')[0];
+    const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-');
+    const backupFileName = `backup-${dateStr}_${timeStr.substring(0, 5)}.json`;
+    const backupFilePath = path.join(backupDir, backupFileName);
+
+    try {
+        const users = sqliteDb.prepare("SELECT * FROM users").all();
+        const projects = sqliteDb.prepare("SELECT * FROM projects").all();
+
+        const backupData = {
+            version: "2.0",
+            exportedAt: now.toISOString(),
+            data: {
+                users: users || [],
+                projects: projects || []
+            }
+        };
+
+        fs.writeFile(backupFilePath, JSON.stringify(backupData, null, 2), (writeErr) => {
+            if (writeErr) {
+                console.error("Failed to save auto-backup:", writeErr);
+            } else {
+                console.log(`[Auto-Backup] Successfully saved: ${backupFileName}`);
+            }
+        });
+    } catch (err) {
+        console.error("Auto-backup query error:", err.message);
+    }
+}
+
+// Mag-run kada 6 na oras (6 hours * 60 minutes * 60 seconds * 1000 ms)
+const SIX_HOURS = 6 * 60 * 60 * 1000;
+setInterval(runAutoBackup, SIX_HOURS);
+
+// Mag-run din 5 segundo pagka-start ng server para may agad na bagong backup
+setTimeout(runAutoBackup, 5000);
+
+
+// ==========================================
 // CLOUDFLARE D1 COMPATIBILITY WRAPPER
 // ==========================================
 const createD1Context = (req, res) => ({
