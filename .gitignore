@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+
+# Local database
+database.sqlite
+database.sqlite-shm
+database.sqlite-wal
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+
+# Deployment generated files
+deploy/packages/
+deploy/staging/
+deploy/history.log
+
+# Backups
+BACKUP/
+
+# Temporary files
+tmp/
+
+# Logs
+*.log
+
+# Environment / secrets
+.env
+.env.*
+
+# OS / editor
+.vscode/
+.DS_Store
+Thumbs.db
+desktop.ini

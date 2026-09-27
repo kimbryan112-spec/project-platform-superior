@@ -5,7 +5,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Project Platform - Settings</title>
-    <link rel="stylesheet" href="../css/style.css">
+    <!-- Cache-buster idinagdag para maiwasan ang lumang CSS states -->
+    <link rel="stylesheet" href="../css/style.css?v=2.6">
 </head>
 
 <body>
@@ -19,7 +20,11 @@
         <div class="logo">
             <h2>PROJECT PLATFORM</h2>
             <p><strong>KBHFILMS</strong></p>
-            <span class="app-version">Version 1.2.8</span>
+            <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
+                <span class="app-version" style="margin: 0;">Version 5.0.0</span>
+                <!-- 3D Environment Dot Indicator (Base sa Server Environment API) -->
+                <div id="serverEnvIndicator" style="width: 10px; height: 10px; border-radius: 50%; background: #64748b; box-shadow: inset 0 1px 2px rgba(255,255,255,0.6), 0 2px 4px rgba(0,0,0,0.4); display: inline-block;" title="Checking Environment..."></div>
+            </div>
         </div>
 
         <nav>
@@ -87,13 +92,15 @@
             </div>
 
             <div class="topbar-right">
-                <select id="yearSelect"></select>
-                <button class="next-year-btn btn-3d">
-                    + Next Year
+
+                <button id="quickDeployBtn" class="btn-3d quick-deploy-btn">
+                    🚀 Quick Deploy
                 </button>
+
                 <div class="profile">
                     <img src="../assets/images/kbhfilms-logo.png" alt="KBHFILMS Logo">
                 </div>
+
             </div>
         </header>
 
@@ -239,6 +246,36 @@
 
 </div> <!-- #app -->
 
+<!-- =========================
+QUICK DEPLOY MODAL (UI + Totoong API)
+================================== -->
+<div id="deployModal" class="deploy-modal">
+    <div class="deploy-window">
+        <div class="deploy-header">
+            <h2>🚀 Quick Deployment</h2>
+        </div>
+        <div class="deploy-body">
+            <div id="deployPercent" class="deploy-percent">0%</div>
+            <div class="deploy-progress">
+                <div id="deployProgressBar" class="deploy-progress-bar"></div>
+            </div>
+            <div id="deployMessage" class="deploy-message">Waiting...</div>
+
+            <div class="deploy-steps">
+                <div id="stepPrepare">⬜ Preparing package...</div>
+                <div id="stepPackage">⬜ Building package...</div>
+                <div id="stepUpload">⬜ Uploading package...</div>
+                <div id="stepDeploy">⬜ Deploying files...</div>
+                <div id="stepRestart">⬜ Restarting server...</div>
+                <div id="stepHealth">⬜ Deployment completed successfully.</div>
+            </div>
+        </div>
+        <div class="deploy-footer">
+            <button id="closeDeployModal" class="btn-3d">Close</button>
+        </div>
+    </div>
+</div>
+
 <script>
 // Authentication check para sa settings page
 const currentUser = JSON.parse(localStorage.getItem("currentUser"));
@@ -250,10 +287,34 @@ if (currentUser.role !== "admin" && currentUser.role !== "Admin") {
     window.location.href = "dashboard.html";
 }
 
-// Script para mag-populate ng Years mula 2023 hanggang 2031 para sa lahat ng dropdowns sa settings
-document.addEventListener("DOMContentLoaded", () => {
+// Server Environment 3D Circle Indicator Logic (Galing sa Backend API)
+document.addEventListener("DOMContentLoaded", async () => {
+    const envIndicator = document.getElementById("serverEnvIndicator");
+    
+    if (envIndicator) {
+        try {
+            const res = await fetch('/api/server-env');
+            const data = await res.json();
+
+            if (data.server === "phone") {
+    // Cerulean Green 3D Dot (Phone Server / Termux)
+    envIndicator.style.background = "radial-gradient(circle at 35% 35%, #5eead4 0%, #14b8a6 60%, #0f766e 100%)";
+    envIndicator.style.boxShadow = "inset 0 1px 2px rgba(255,255,255,0.7), 0 0 8px rgba(20, 184, 166, 0.8)";
+    envIndicator.title = "Phone Server (Termux)";
+} else {
+    // Yellow 3D Dot (Laptop Server)
+    envIndicator.style.background = "radial-gradient(circle at 35% 35%, #fde047 0%, #eab308 60%, #ca8a04 100%)";
+    envIndicator.style.boxShadow = "inset 0 1px 2px rgba(255,255,255,0.7), 0 0 8px rgba(234, 179, 8, 0.8)";
+    envIndicator.title = "Laptop Server";
+}
+        } catch (err) {
+            console.error("Error fetching server environment:", err);
+            envIndicator.style.background = "#64748b";
+            envIndicator.title = "Unknown Server";
+        }
+    }
+
     const yearSelects = [
-        document.getElementById("yearSelect"),
         document.getElementById("resetMonthYear"),
         document.getElementById("resetYear")
     ];
@@ -264,25 +325,116 @@ document.addEventListener("DOMContentLoaded", () => {
 
     yearSelects.forEach(selectElement => {
         if (!selectElement) return;
-        
+
         selectElement.innerHTML = "";
-        
+
         for (let y = startYear; y <= endYear; y++) {
             const option = document.createElement("option");
             option.value = y;
             option.textContent = y;
-            
+
             if (y === currentYear) {
                 option.selected = true;
             }
-            
+
             selectElement.appendChild(option);
         }
     });
+
+    // ==================================================
+    // QUICK DEPLOY MODAL (UI & Totoong PowerShell API Connection)
+    // ==================================================
+    const deployBtn = document.getElementById("quickDeployBtn");
+    const deployModal = document.getElementById("deployModal");
+    const closeDeployModal = document.getElementById("closeDeployModal");
+
+    if (deployBtn && deployModal) {
+        deployBtn.addEventListener("click", async () => {
+            deployModal.classList.add("show");
+
+            const percent = document.getElementById("deployPercent");
+            const bar = document.getElementById("deployProgressBar");
+            const message = document.getElementById("deployMessage");
+
+            const steps = [
+                { percent: 15, message: "Preparing package...", id: "stepPrepare" },
+                { percent: 35, message: "Building package...", id: "stepPackage" },
+                { percent: 60, message: "Uploading package...", id: "stepUpload" },
+                { percent: 80, message: "Deploying files...", id: "stepDeploy" },
+                { percent: 95, message: "Restarting server...", id: "stepRestart" },
+                { percent: 100, message: "Deployment completed successfully.", id: "stepHealth" }
+            ];
+
+            document.querySelectorAll(".deploy-steps div").forEach(step => {
+                step.innerHTML = "⬜ " + step.textContent.replace(/^.*?\s/, "");
+            });
+
+            if (percent) percent.textContent = "0%";
+            if (bar) bar.style.width = "0%";
+            if (message) message.textContent = "Waiting...";
+
+            let index = 0;
+            function animateStep() {
+                if (index < steps.length - 1) {
+                    const step = steps[index];
+                    if (percent) percent.textContent = step.percent + "%";
+                    if (bar) bar.style.width = step.percent + "%";
+                    if (message) message.textContent = step.message;
+
+                    const targetStep = document.getElementById(step.id);
+                    if (targetStep) {
+                        targetStep.innerHTML = "✅ " + targetStep.textContent.replace(/^.*?\s/, "");
+                    }
+                    index++;
+                    setTimeout(animateStep, 800);
+                }
+            }
+            animateStep();
+
+            try {
+                const response = await fetch('/api/deploy', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                const data = await response.json();
+
+                if (percent) percent.textContent = "100%";
+                if (bar) bar.style.width = "100%";
+                if (message) message.textContent = "Deployment completed successfully.";
+                const finalStep = document.getElementById("stepHealth");
+                if (finalStep) {
+                    finalStep.innerHTML = "✅ " + finalStep.textContent.replace(/^.*?\s/, "");
+                }
+
+                if (!data.success) {
+                    alert("⚠ May babala sa deployment: " + (data.message || "Unknown error"));
+                }
+            } catch (err) {
+                console.error("Error sa Quick Deploy:", err);
+                alert("❌ Hindi makakonekta sa server para i-run ang deployment.");
+            }
+        });
+    }
+
+    if (closeDeployModal && deployModal) {
+        closeDeployModal.addEventListener("click", () => {
+            deployModal.classList.remove("show");
+            location.reload();
+        });
+    }
+
+    deployModal?.addEventListener("click", (e) => {
+        if (e.target === deployModal) {
+            deployModal.classList.remove("show");
+            location.reload();
+        }
+    });
+
 });
 </script>
 
-<script src="../js/settings.js"></script>
+<script src="../js/settings.js?v=2.6"></script>
 
 </body>
 </html>

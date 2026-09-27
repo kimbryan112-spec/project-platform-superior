@@ -17,7 +17,30 @@
     <!-- Android / PWA -->
     <link rel="manifest" href="/manifest.json">
 
-    <link rel="stylesheet" href="../css/style.css">
+    <!-- CSS na may cache-buster -->
+    <link rel="stylesheet" href="../css/style.css?v=2.6">
+    <style>
+        /* Estilo para sa Contenteditable Editor sa mga Modals */
+        .editable-editor-box {
+            width: 100%;
+            height: 250px;
+            background: #ffffff;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            padding: 12px;
+            font-family: inherit;
+            font-size: 14px;
+            line-height: 1.5;
+            color: #1e293b;
+            overflow-y: auto;
+            outline: none;
+            box-sizing: border-box;
+        }
+        .editable-editor-box:focus {
+            border-color: #2563eb;
+            box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+        }
+    </style>
 </head>
 
 <body>
@@ -29,7 +52,11 @@
         <div class="logo">
             <h2>PROJECT PLATFORM</h2>
             <p><strong>KBHFILMS</strong></p>
-            <span class="app-version">Version 1.2.8</span>
+            <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
+                <span class="app-version" style="margin: 0;">Version 5.0.0</span>
+                <!-- 3D Environment Dot Indicator (Makikita lang kung Admin) -->
+                <div id="serverEnvIndicator" style="display: none; width: 10px; height: 10px; border-radius: 50%; background: #64748b; box-shadow: inset 0 1px 2px rgba(255,255,255,0.6), 0 2px 4px rgba(0,0,0,0.4);" title="Checking Environment..."></div>
+            </div>
         </div>
 
         <nav>
@@ -336,7 +363,8 @@
             <h3>Special Instructions</h3>
             <button id="closeInstructionModal">&times;</button>
         </div>
-        <textarea id="instructionTextarea"></textarea>
+        <!-- Pinatibay at ginawang Contenteditable Div para mag-render ng Hyperlinks -->
+        <div id="instructionTextarea" contenteditable="true" class="editable-editor-box"></div>
     </div>
 </div>
 
@@ -348,7 +376,8 @@
             <button id="closeCommentsModal" class="close-modal">&times;</button>
         </div>
         <div style="padding: 20px;">
-            <textarea id="commentsTextarea" placeholder="Enter comments or notes here..."></textarea>
+            <!-- Pinatibay at ginawang Contenteditable Div para mag-render ng Hyperlinks -->
+            <div id="commentsTextarea" contenteditable="true" class="editable-editor-box"></div>
         </div>
     </div>
 </div>
@@ -380,7 +409,7 @@ if (userRoleLower !== "admin" && userRoleLower !== "dashboard" && userRoleLower 
     window.location.href = "../login.html";
 }
 
-const IS_ADMIN = currentUser.role === "admin";
+const IS_ADMIN = userRoleLower === "admin";
 
 if (!IS_ADMIN) {
     const adminMenu = document.getElementById("adminMenu");
@@ -388,6 +417,10 @@ if (!IS_ADMIN) {
     
     const notifWrapper = document.getElementById("dashboardNotificationWrapper");
     if (notifWrapper) notifWrapper.style.display = "none";
+
+    // Itago ang 3D indicator para sa Manager role
+    const envIndicator = document.getElementById("serverEnvIndicator");
+    if (envIndicator) envIndicator.style.display = "none";
 
     document.addEventListener("DOMContentLoaded", () => {
         ['monthContextMenu', 'watchContextMenu', 'filesContextMenu', 'songContextMenu'].forEach(id => {
@@ -400,7 +433,34 @@ if (!IS_ADMIN) {
         });
     });
 } else {
-    document.addEventListener("DOMContentLoaded", () => {
+    // Ipakita at i-update ang 3D indicator para sa Admin role lamang (galing sa /api/server-env)
+    document.addEventListener("DOMContentLoaded", async () => {
+        const envIndicator = document.getElementById("serverEnvIndicator");
+        
+        if (envIndicator) {
+            envIndicator.style.display = "inline-block";
+            try {
+                const res = await fetch('/api/server-env');
+                const data = await res.json();
+
+                if (data.server === "phone") {
+    // Cerulean Green 3D Dot (Phone Server / Termux)
+    envIndicator.style.background = "radial-gradient(circle at 35% 35%, #5eead4 0%, #14b8a6 60%, #0f766e 100%)";
+    envIndicator.style.boxShadow = "inset 0 1px 2px rgba(255,255,255,0.7), 0 0 8px rgba(20, 184, 166, 0.8)";
+    envIndicator.title = "Phone Server (Termux)";
+} else {
+    // Yellow 3D Dot (Laptop Server)
+    envIndicator.style.background = "radial-gradient(circle at 35% 35%, #fde047 0%, #eab308 60%, #ca8a04 100%)";
+    envIndicator.style.boxShadow = "inset 0 1px 2px rgba(255,255,255,0.7), 0 0 8px rgba(234, 179, 8, 0.8)";
+    envIndicator.title = "Laptop Server";
+}
+            } catch (err) {
+                console.error("Error fetching server environment:", err);
+                envIndicator.style.background = "#64748b";
+                envIndicator.title = "Unknown Server";
+            }
+        }
+
         const bell = document.getElementById("notificationBell");
         const dropdown = document.getElementById("notificationDropdown");
 
@@ -442,12 +502,13 @@ if (userName) {
 
 const roleMap = {
     admin: "Administrator",
-    dashboard: "Manager"
+    dashboard: "Manager",
+    manager: "Manager"
 };
 
 const userRole = document.getElementById("userRole");
 if (userRole) {
-    userRole.textContent = roleMap[currentUser.role] || currentUser.role;
+    userRole.textContent = roleMap[userRoleLower] || currentUser.role;
 }
 
 async function fetchActivityLogs() {
@@ -553,7 +614,8 @@ async function checkNewLogsCount() {
 }
 </script>
 
-<script src="../js/script.js?v=20260823-1"></script>
+<!-- Cache-buster idinagdag sa script.js -->
+<script src="../js/script.js?v=2.6"></script>
 
 <script>
 if ("serviceWorker" in navigator) {

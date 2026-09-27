@@ -459,7 +459,10 @@ function populateRow(row, data) {
         const instructionBtn = cells[0].querySelector(".instruction-btn");
         if (instructionBtn) {
             instructionBtn.dataset.notes = data.instruction || "";
-            instructionBtn.style.background = data.instruction?.trim() ? "#22c55e" : "#ff7a1a";
+            // Kung mayaman sa HTML/text o may data, berde; kundi orange
+            const tempDiv = document.createElement("div");
+            tempDiv.innerHTML = data.instruction || "";
+            instructionBtn.style.background = tempDiv.textContent.trim() ? "#22c55e" : "#ff7a1a";
         }
     }
 
@@ -473,7 +476,9 @@ function populateRow(row, data) {
         const concernsBtn = cells[1].querySelector(".concerns-btn");
         if (concernsBtn) {
             concernsBtn.dataset.notes = data.concerns || "";
-            concernsBtn.classList.toggle("has-comments", (data.concerns || "").trim() !== "");
+            const tempDiv = document.createElement("div");
+            tempDiv.innerHTML = data.concerns || "";
+            concernsBtn.classList.toggle("has-comments", tempDiv.textContent.trim() !== "");
         }
 
         const slider = cells[1].querySelector(".progress-slider");
@@ -524,7 +529,9 @@ function populateRow(row, data) {
 
         if (commentsBtn) {
             commentsBtn.dataset.notes = songData.notes || "";
-            commentsBtn.classList.toggle("has-comments", (songData.notes || "").trim() !== "");
+            const tempDiv = document.createElement("div");
+            tempDiv.innerHTML = songData.notes || "";
+            commentsBtn.classList.toggle("has-comments", tempDiv.textContent.trim() !== "");
         }
     };
 
@@ -1116,7 +1123,6 @@ window.handleDeleteEverythingAction = async function() {
 
     if (!LOCAL_MODE) {
         try {
-            // 🛠️ INAYOS: Ginamit ang tamang endpoint na /api/delete-all
             const res = await fetch(`/api/delete-all`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" }
@@ -1664,22 +1670,100 @@ songLinkModal?.addEventListener("click", (e) => {
     }
 });
 
-/* ===============================
+// ===============================
 // SPECIAL INSTRUCTIONS & COMMENTS MODALS
-// =============================== */
-let activeCoupleRow = null;
-let activeNotesButton = null;
+// ===============================
 
-const instructionModal = document.getElementById("instructionModal");
-const instructionTextarea = document.getElementById("instructionTextarea");
-const closeInstructionModal = document.getElementById("closeInstructionModal");
+// Generic URL Parser / Converter (Nilagyan ng contenteditable="false" para lumitaw ang hand pointer cursor)
+function convertUrlsToLinks(text) {
+    if (!text) return "";
+    
+    // Kung may existing <a> tags na sa lumang save, siguraduhing may contenteditable="false" rin sila
+    if (text.includes("<a ")) {
+        return text.replace(/<a\s+([^>]+)>/gi, (match, attrs) => {
+            if (!attrs.includes('contenteditable')) {
+                return `<a ${attrs} contenteditable="false" style="color: #2563eb !important; text-decoration: underline !important; cursor: pointer !important;">`;
+            }
+            return match;
+        });
+    }
 
+    const urlRegex = /(https?:\/\/[^\s<]+|www\.[^\s<]+)/gi;
+    return text.replace(urlRegex, (url) => {
+        let href = url;
+        if (!href.startsWith("http://") && !href.startsWith("https://")) {
+            href = "https://" + href;
+        }
+        return `<a href="${href}" target="_blank" rel="noopener noreferrer" contenteditable="false" style="color: #2563eb !important; text-decoration: underline !important; cursor: pointer !important;">${url}</a>`;
+    });
+}
+
+function getEditorContent(element) {
+    if (!element) return "";
+    return element.innerHTML;
+}
+
+// 🛠️ Dito natin sinisigurado na pati ang mga lumang plain text ay mada-convert sa totoong link pag-open ng modal
+function setEditorContent(element, htmlContent) {
+    if (!element) return;
+    const processed = convertUrlsToLinks(htmlContent);
+    element.innerHTML = processed || "";
+}
+
+// 🛠️ Tamang paste handler para manatili sa cursor position at maging clickable link
+function handleEditorPaste(e, textareaElement) {
+    e.preventDefault();
+    const text = (e.clipboardData || window.clipboardData).getData("text");
+    const processedHtml = convertUrlsToLinks(text);
+
+    const sel = window.getSelection();
+    if (sel.rangeCount > 0) {
+        const range = sel.getRangeAt(0);
+        if (textareaElement.contains(range.commonAncestorContainer)) {
+            range.deleteContents();
+            const div = document.createElement("div");
+            div.innerHTML = processedHtml;
+            const frag = document.createDocumentFragment();
+            let node, lastNode;
+            while ((node = div.firstChild)) {
+                lastNode = frag.appendChild(node);
+            }
+            range.insertNode(frag);
+            
+            if (lastNode) {
+                range.setStartAfter(lastNode);
+                range.collapse(true);
+                sel.removeAllRanges();
+                sel.addRange(range);
+            }
+        } else {
+            textareaElement.innerHTML += processedHtml;
+        }
+    } else {
+        textareaElement.innerHTML += processedHtml;
+    }
+
+    textareaElement.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+// 🛠️ Click handler para bumukas agad ang link sa bagong tab kapag na-click
+function handleEditorClick(e) {
+    const target = e.target.closest("a");
+    if (target && target.href) {
+        e.preventDefault();
+        window.open(target.href, "_blank", "noopener,noreferrer");
+    }
+}
+
+// --- SPECIAL INSTRUCTIONS LOGIC ---
 document.querySelectorAll(".instruction-btn").forEach((button) => {
     button.addEventListener("click", () => {
         activeCoupleRow = button.closest("tr");
         const instructionBtn = activeCoupleRow.querySelector(".instruction-btn");
 
-        if (instructionTextarea) instructionTextarea.value = instructionBtn.dataset.notes || "";
+        if (instructionTextarea) {
+            setEditorContent(instructionTextarea, instructionBtn.dataset.notes || "");
+        }
         if (instructionModal) instructionModal.classList.add("show");
         if (instructionTextarea) instructionTextarea.focus();
     });
@@ -1699,23 +1783,31 @@ instructionTextarea?.addEventListener("input", () => {
     if (!activeCoupleRow) return;
 
     const instructionBtn = activeCoupleRow.querySelector(".instruction-btn");
-    instructionBtn.dataset.notes = instructionTextarea.value;
-    instructionBtn.style.background = instructionTextarea.value.trim() ? "#22c55e" : "#ff7a1a";
+    const content = getEditorContent(instructionTextarea);
+    
+    instructionBtn.dataset.notes = content;
+    instructionBtn.style.background = instructionTextarea.textContent.trim() ? "#22c55e" : "#ff7a1a";
     saveProjects();
     updateCurrentMonthHasData();
     recordActivity("Updated Special Instructions", "Edited instruction notes");
 });
 
-const commentsModal = document.getElementById("commentsModal");
-const commentsTextarea = document.getElementById("commentsTextarea");
-const closeCommentsModal = document.getElementById("closeCommentsModal");
+instructionTextarea?.addEventListener("paste", (e) => {
+    handleEditorPaste(e, instructionTextarea);
+});
 
+instructionTextarea?.addEventListener("click", handleEditorClick);
+
+
+// --- COMMENTS / CONCERNS LOGIC ---
 document.addEventListener("click", (e) => {
     const button = e.target.closest(".comments-btn, .concerns-btn");
     if (!button) return;
 
     activeNotesButton = button;
-    if (commentsTextarea) commentsTextarea.value = button.dataset.notes || "";
+    if (commentsTextarea) {
+        setEditorContent(commentsTextarea, button.dataset.notes || "");
+    }
 
     if (commentsModal) {
         if (button.classList.contains("concerns-btn")) {
@@ -1745,12 +1837,20 @@ commentsModal?.addEventListener("click", (e) => {
 commentsTextarea?.addEventListener("input", () => {
     if (!activeNotesButton) return;
 
-    activeNotesButton.dataset.notes = commentsTextarea.value;
-    activeNotesButton.classList.toggle("has-comments", commentsTextarea.value.trim() !== "");
+    const content = getEditorContent(commentsTextarea);
+    activeNotesButton.dataset.notes = content;
+    activeNotesButton.classList.toggle("has-comments", commentsTextarea.textContent.trim() !== "");
     saveProjects();
     updateCurrentMonthHasData();
     recordActivity("Updated Comments / Concerns", "Edited notes");
 });
+
+// Ginamit na rin ang handleEditorPaste at handleEditorClick para sa comments
+commentsTextarea?.addEventListener("paste", (e) => {
+    handleEditorPaste(e, commentsTextarea);
+});
+
+commentsTextarea?.addEventListener("click", handleEditorClick);
 
 /* ==================================
    WATCH PLAYER WINDOW DRAG & CONTROLS
@@ -2239,4 +2339,88 @@ function restoreProjectsLocal(year = currentYear, month = currentMonth) {
         updateCurrentMonthHasData();
         return false;
     }
+}
+
+// ==================================
+// QUICK DEPLOYMENT MODAL FEATURE
+// ==================================
+const quickDeployBtn = document.getElementById("quickDeployBtn");
+const deployModal = document.getElementById("deployModal");
+
+if (quickDeployBtn && deployModal) {
+    quickDeployBtn.addEventListener("click", () => {
+        deployModal.classList.add("show");
+
+        const percent = document.getElementById("deployPercent");
+        const bar = document.getElementById("deployProgressBar");
+        const message = document.getElementById("deployMessage");
+
+        const steps = [
+            {
+                percent: 10,
+                message: "Preparing package...",
+                id: "stepPrepare"
+            },
+            {
+                percent: 25,
+                message: "Building package...",
+                id: "stepPackage"
+            },
+            {
+                percent: 45,
+                message: "Uploading package...",
+                id: "stepUpload"
+            },
+            {
+                percent: 70,
+                message: "Deploying files...",
+                id: "stepDeploy"
+            },
+            {
+                percent: 90,
+                message: "Restarting server...",
+                id: "stepRestart"
+            },
+            {
+                percent: 100,
+                message: "Deployment completed successfully.",
+                id: "stepHealth"
+            }
+        ];
+
+        document
+            .querySelectorAll(".deploy-steps div")
+            .forEach(step => {
+                step.innerHTML = "⬜ " + step.textContent.replace(/^.*?\s/, "");
+            });
+
+        if (percent) percent.textContent = "0%";
+        if (bar) bar.style.width = "0%";
+        if (message) message.textContent = "Waiting...";
+
+        let index = 0;
+
+        function nextStep() {
+            if (index >= steps.length) {
+                return;
+            }
+
+            const step = steps[index];
+
+            if (percent) percent.textContent = step.percent + "%";
+            if (bar) bar.style.width = step.percent + "%";
+            if (message) message.textContent = step.message;
+
+            const targetStep = document.getElementById(step.id);
+            if (targetStep) {
+                targetStep.innerHTML = "✅ " + targetStep.textContent.replace(/^.*?\s/, "");
+            }
+
+            index++;
+
+            setTimeout(nextStep, 1000);
+        }
+
+        setTimeout(nextStep, 800);
+    });
 }

@@ -1274,84 +1274,107 @@ select{
     font-size:24px;
 }
 
-#instructionTextarea{
-    width:100%;
-    height:420px;
-    border:none;
-    resize:none;
-    outline:none;
-    padding:20px;
-    font-size:16px;
-    line-height:1.7;
-    background:#fffbe6;
-    color:#333;
+/* Para sa Special Instructions Editor (Div na ngayon) */
+#instructionTextarea {
+    width: 100%;
+    height: 420px;
+    border: none;
+    resize: none;
+    outline: none;
+    padding: 20px;
+    font-size: 16px;
+    line-height: 1.7;
+    background: #fffbe6;
+    color: #333;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    box-sizing: border-box;
+}
+
+#instructionTextarea a {
+    color: #2563eb !important;
+    text-decoration: underline !important;
+    cursor: pointer !important;
 }
 
 /* ==================================
     COMMENTS MODAL
 ================================== */
 
-#commentsTextarea{
-    display:block;
-    width:100%;
-    height:300px;
-    padding:16px;
-    border:none;
-    border-radius:8px;
-    outline:none;
-    resize:none;
-    overflow-y:auto;
-    background:#2f2f2f;
-    color:#fff;
-    font:15px/1.7 "Segoe UI", sans-serif;
-    box-shadow:inset 0 1px 2px rgba(0,0,0,.35);
+#commentsTextarea {
+    display: block;
+    width: 100%;
+    height: 300px;
+    padding: 16px;
+    border: none;
+    border-radius: 8px;
+    outline: none;
+    resize: none;
+    overflow-y: auto;
+    background: #2f2f2f;
+    color: #fff;
+    font: 15px/1.7 "Segoe UI", sans-serif;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,.35);
 }
 
-#commentsTextarea::placeholder{
-    color:rgba(255,255,255,.55);
+/* 🛠️ Idinagdag para gumana ang link style at hand pointer sa loob ng Comments box */
+#commentsTextarea a {
+    color: #2563eb !important;
+    text-decoration: underline !important;
+    cursor: pointer !important;
+}
+
+#commentsTextarea::placeholder {
+    color: rgba(255,255,255,.55);
 }
 
 /* ==================================
     PROJECT CONCERNS MODE
 ================================== */
 
-#commentsModal.concerns-mode .modal-content{
-    background:#fff7ed;
-    border:3px solid #c2410c;
-    box-shadow:
-        0 20px 50px rgba(194,65,12,.25);
+#commentsModal.concerns-mode .modal-content {
+    background: #fff7ed;
+    border: 3px solid #c2410c;
+    box-shadow: 0 20px 50px rgba(194,65,12,.25);
 }
 
-#commentsModal.concerns-mode .modal-header{
-    background:linear-gradient(
+#commentsModal.concerns-mode .modal-header {
+    background: linear-gradient(
         to bottom,
         #ea580c,
         #c2410c
     );
-    color:#fff;
-    border-bottom:none;
+    color: #fff;
+    border-bottom: none;
 }
 
-#commentsModal.concerns-mode .modal-header h2{
-    color:#fff;
-    font-weight:800;
+#commentsModal.concerns-mode .modal-header h2 {
+    color: #fff;
+    font-weight: 800;
 }
 
-#commentsModal.concerns-mode #commentsTextarea{
-    background:#fffaf5;
-    color:#3f3f46;
-    border-top:2px solid #fdba74;
-    box-shadow:none;
+#commentsModal.concerns-mode #commentsTextarea {
+    background: #fffaf5;
+    color: #3f3f46;
+    border-top: 2px solid #fdba74;
+    box-shadow: none;
 }
 
-#commentsModal.concerns-mode #commentsTextarea::placeholder{
-    color:#9a3412;
+/* Siguraduhing gagana pa rin ang link kahit nasa concerns-mode */
+#commentsModal.concerns-mode #commentsTextarea a {
+    color: #2563eb !important;
+    text-decoration: underline !important;
+    cursor: pointer !important;
 }
 
-#commentsModal.concerns-mode #commentsTextarea:focus{
-    outline:none;
-    box-shadow:
-        inset 0 0 0 2px #ea580c;
+#commentsModal.concerns-mode #commentsTextarea::placeholder {
+    color: #9a3412;
+}
+
+#commentsModal.concerns-mode #commentsTextarea:focus {
+    outline: none;
+    box-shadow: inset 0 0 0 2px #ea580c;
 }
 
 /*==================================
@@ -2885,4 +2908,251 @@ input[type="url"]::placeholder{
     .sidebar {
         height: 50px;
     }
+}
+
+/* ==========================================================
+   QUICK DEPLOY
+========================================================== */
+
+.quick-deploy-btn{
+    background: linear-gradient(135deg, #0ea5e9, #2563eb);
+    color: #fff;
+    font-weight: 700;
+    min-width: 165px;
+    padding: 10px 20px;       /* Dinagdagan ng kapal/height para hindi na payat */
+    border-radius: 10px;      /* Pabilog sa gilid para mas modern tignan */
+    margin-right: 15px;       /* Binigyan ng pagitan para hindi madikit sa logo */
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
+    cursor: pointer;
+    border: none;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.quick-deploy-btn:hover{
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(37, 99, 235, 0.35);
+}
+
+
+/* ==========================================================
+   DEPLOY MODAL
+========================================================== */
+
+.deploy-modal{
+
+    position:fixed;
+    inset:0;
+
+    background:rgba(0,0,0,.45);
+
+    display:none;
+
+    justify-content:center;
+    align-items:center;
+
+    z-index:99999;
+
+    backdrop-filter:blur(6px);
+
+}
+
+.deploy-modal.show{
+
+    display:flex;
+
+}
+
+.deploy-window{
+
+    width:620px;
+    max-width:92%;
+
+    background:#fff;
+
+    border-radius:18px;
+
+    overflow:hidden;
+
+    box-shadow:
+    0 30px 60px rgba(0,0,0,.25);
+
+    animation:deployPopup .22s ease;
+
+}
+
+@keyframes deployPopup{
+
+    from{
+
+        opacity:0;
+        transform:translateY(20px) scale(.98);
+
+    }
+
+    to{
+
+        opacity:1;
+        transform:translateY(0) scale(1);
+
+    }
+
+}
+
+.deploy-header{
+
+    padding:22px 28px;
+
+    background:linear-gradient(135deg,#2563eb,#1d4ed8);
+
+    color:#fff;
+
+}
+
+.deploy-header h2{
+
+    margin:0;
+
+    font-size:24px;
+
+}
+
+.deploy-body{
+
+    padding:28px;
+
+}
+
+.deploy-percent{
+
+    text-align:center;
+
+    font-size:42px;
+
+    font-weight:700;
+
+    color:#2563eb;
+
+    margin-bottom:18px;
+
+}
+
+.deploy-progress{
+
+    width:100%;
+
+    height:18px;
+
+    border-radius:999px;
+
+    overflow:hidden;
+
+    background:#e5e7eb;
+
+}
+
+.deploy-progress-bar{
+
+    width:0%;
+
+    height:100%;
+
+    border-radius:999px;
+
+    background:linear-gradient(
+        90deg,
+        #06b6d4,
+        #2563eb
+    );
+
+    box-shadow:
+        0 0 12px rgba(37,99,235,.35);
+
+    transition:
+        width .45s ease,
+        background .35s ease,
+        box-shadow .35s ease;
+
+}
+
+.deploy-message{
+
+    margin-top:16px;
+
+    text-align:center;
+
+    font-size:15px;
+
+    color:#555;
+
+    font-weight:600;
+
+}
+
+.deploy-steps{
+
+    margin-top:28px;
+
+    display:flex;
+
+    flex-direction:column;
+
+    gap:14px;
+
+}
+
+.deploy-steps div{
+
+    background:#f7f8fb;
+
+    padding:12px 16px;
+
+    border-radius:10px;
+
+    font-size:15px;
+
+    border-left:4px solid #d1d5db;
+
+}
+
+.deploy-footer{
+
+    padding:20px 28px;
+
+    border-top:1px solid #eee;
+
+    display:flex;
+
+    justify-content:flex-end;
+
+}
+
+/* ==========================================================
+   DEPLOY MODAL FOOTER BUTTON
+========================================================== */
+.deploy-footer button {
+    background: linear-gradient(135deg, #0ea5e9, #2563eb);
+    color: #fff;
+    font-weight: 700;
+    padding: 10px 24px;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.deploy-footer button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(37, 99, 235, 0.35);
+}
+
+/* Pilit na ginagawang hand pointer ang cursor sa kahit anong link sa loob ng editable/modal boxes */
+[contenteditable="true"] a,
+[contenteditable="true"] a *,
+.editable-editor-box a,
+#instructionTextarea a,
+#commentsTextarea a {
+    color: #2563eb !important;
+    text-decoration: underline !important;
+    cursor: pointer !important;
 }

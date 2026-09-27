@@ -668,3 +668,40 @@ async function deleteEverything() {
 }
 
 document.getElementById("deleteAllBtn")?.addEventListener("click", deleteEverything);
+
+/* ==========================================
+   PART 8
+   QUICK DEPLOY BUTTON HANDLER
+========================================== */
+
+async function handleQuickDeploy() {
+    const deployModal = document.getElementById("deployModal"); 
+    if (deployModal) deployModal.classList.add("show");
+
+    try {
+        console.log("Sinisimulan ang totoong Quick Deployment sa pamamagitan ng PowerShell...");
+
+        const response = await fetch('/api/deploy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            alert("✔ Deployment completed successfully! Na-update na ang server sa phone.");
+            if (deployModal) deployModal.classList.remove("show");
+            location.reload(); 
+        } else {
+            alert("❌ Deployment failed: " + data.message);
+            if (deployModal) deployModal.classList.remove("show");
+        }
+
+    } catch (err) {
+        console.error("Error sa pag-deploy:", err);
+        alert("May error sa koneksyon patungo sa server.");
+        if (deployModal) deployModal.classList.remove("show");
+    }
+}
+
+document.getElementById("quickDeployBtn")?.addEventListener("click", handleQuickDeploy);

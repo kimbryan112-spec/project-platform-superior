@@ -1,6 +1,10 @@
 const express = require("express");
 const path = require("path");
 const Database = require("better-sqlite3");
+const multer = require("multer");
+const AdmZip = require("adm-zip");
+const fs = require("fs");
+const { exec } = require("child_process"); // <--- Idinagdag para mapagana ang PowerShell execution
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -11,6 +15,77 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json({ limit: "15mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname)));
+
+// ==========================================
+// QUICK DEPLOY (API Endpoint para patakbuhin ang deploy.ps1)
+// ==========================================
+
+// Idinagdag ang totoong backend API para sa Quick Deploy button
+app.post("/api/deploy", (req, res) => {
+    const deployScriptPath = path.join(__dirname, "deploy.ps1");
+
+    // Pinapalakad ang PowerShell script nang direkta sa iyong system
+    exec(`powershell.exe -ExecutionPolicy Bypass -File "${deployScriptPath}"`, (error, stdout, stderr) => {
+        if (error) {
+            console.error(`Deployment error: ${error.message}`);
+            return res.status(500).json({ success: false, message: error.message });
+        }
+        if (stderr) {
+            console.warn(`Deployment stderr: ${stderr}`);
+        }
+        console.log("Deployment output:", stdout);
+        res.json({ success: true, message: "Deployment completed successfully!", output: stdout });
+    });
+});
+
+// ==========================================
+// SERVER ENVIRONMENT API (Para malaman kung Laptop o Phone Server)
+// ==========================================
+app.get("/api/server-env", (req, res) => {
+    // Sinusuri kung ang process ay tumatakbo sa Termux (Android) o iba pang server environment
+    const isTermux = (process.env.PREFIX && process.env.PREFIX.includes("termux")) || process.platform === "android";
+    res.json({
+        server: isTermux ? "phone" : "laptop"
+    });
+});
+
+const upload = multer({
+    dest: path.join(__dirname, "tmp")
+});
+
+app.post("/quick-deploy", upload.single("file"), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: "No file uploaded."
+      });
+    }
+
+    const zip = new AdmZip(req.file.path);
+
+    zip.extractAllTo(__dirname, true);
+
+    fs.unlinkSync(req.file.path);
+
+    res.json({
+      success: true,
+      message: "Deployment complete."
+    });
+
+    console.log("Quick Deploy completed.");
+
+    setTimeout(() => process.exit(0), 1000);
+
+  } catch (err) {
+    console.error(err);
+
+    res.status(500).json({
+      success: false,
+      message: err.message
+    });
+  }
+});
 
 // ==========================================
 // SQLITE DATABASE INITIALIZATION & SCHEMA
