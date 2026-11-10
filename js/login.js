@@ -46,6 +46,17 @@ if (loginForm) {
                 localStorage.setItem("currentUser", JSON.stringify(offlineUser));
                 window.location.href = "pages/dashboard.html"; 
                 return;
+            } else if (email === "markromero@kbhfilms.com" && password === "markromero123") {
+                const offlineUser = {
+                    id: 3,
+                    name: "Mark Romero",
+                    fullname: "Mark Romero",
+                    email: email,
+                    role: "Video Editor"
+                };
+                localStorage.setItem("currentUser", JSON.stringify(offlineUser));
+                window.location.href = "pages/dashboard.html"; 
+                return;
             } else {
                 if (errorText) {
                     errorText.textContent = "Invalid email or password.";

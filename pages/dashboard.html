@@ -368,7 +368,7 @@
     </div>
 </div>
 
-<!-- Comments Modal (Match na sa script.js at CSS) -->
+<!-- Comments Modal -->
 <div id="commentsModal" class="modal">
     <div class="modal-content">
         <div class="modal-header">
@@ -404,7 +404,8 @@ if (!currentUser) {
 }
 
 const userRoleLower = (currentUser.role || "").toLowerCase();
-if (userRoleLower !== "admin" && userRoleLower !== "dashboard" && userRoleLower !== "manager") {
+// Idinagdag ang "video editor" sa pinapayagang roles
+if (userRoleLower !== "admin" && userRoleLower !== "dashboard" && userRoleLower !== "manager" && userRoleLower !== "video editor") {
     alert("Access Denied.");
     window.location.href = "../login.html";
 }
@@ -418,7 +419,7 @@ if (!IS_ADMIN) {
     const notifWrapper = document.getElementById("dashboardNotificationWrapper");
     if (notifWrapper) notifWrapper.style.display = "none";
 
-    // Itago ang 3D indicator para sa Manager role
+    // Itago ang 3D indicator para sa Manager at Video Editor roles
     const envIndicator = document.getElementById("serverEnvIndicator");
     if (envIndicator) envIndicator.style.display = "none";
 
@@ -444,16 +445,14 @@ if (!IS_ADMIN) {
                 const data = await res.json();
 
                 if (data.server === "phone") {
-    // Cerulean Green 3D Dot (Phone Server / Termux)
-    envIndicator.style.background = "radial-gradient(circle at 35% 35%, #5eead4 0%, #14b8a6 60%, #0f766e 100%)";
-    envIndicator.style.boxShadow = "inset 0 1px 2px rgba(255,255,255,0.7), 0 0 8px rgba(20, 184, 166, 0.8)";
-    envIndicator.title = "Phone Server (Termux)";
-} else {
-    // Yellow 3D Dot (Laptop Server)
-    envIndicator.style.background = "radial-gradient(circle at 35% 35%, #fde047 0%, #eab308 60%, #ca8a04 100%)";
-    envIndicator.style.boxShadow = "inset 0 1px 2px rgba(255,255,255,0.7), 0 0 8px rgba(234, 179, 8, 0.8)";
-    envIndicator.title = "Laptop Server";
-}
+                    envIndicator.style.background = "radial-gradient(circle at 35% 35%, #5eead4 0%, #14b8a6 60%, #0f766e 100%)";
+                    envIndicator.style.boxShadow = "inset 0 1px 2px rgba(255,255,255,0.7), 0 0 8px rgba(20, 184, 166, 0.8)";
+                    envIndicator.title = "Phone Server (Termux)";
+                } else {
+                    envIndicator.style.background = "radial-gradient(circle at 35% 35%, #fde047 0%, #eab308 60%, #ca8a04 100%)";
+                    envIndicator.style.boxShadow = "inset 0 1px 2px rgba(255,255,255,0.7), 0 0 8px rgba(234, 179, 8, 0.8)";
+                    envIndicator.title = "Laptop Server";
+                }
             } catch (err) {
                 console.error("Error fetching server environment:", err);
                 envIndicator.style.background = "#64748b";
@@ -503,7 +502,8 @@ if (userName) {
 const roleMap = {
     admin: "Administrator",
     dashboard: "Manager",
-    manager: "Manager"
+    manager: "Manager",
+    "video editor": "Video Editor"
 };
 
 const userRole = document.getElementById("userRole");
@@ -566,8 +566,8 @@ async function fetchActivityLogs() {
                         <div style="color: #2563eb; font-weight: 500; font-size: 12px;">⚡ ${log.action}</div>
                         <div style="color: #64748b; font-size: 11px; background: rgba(0,0,0,0.02); padding: 4px 6px; border-radius: 4px;">📝 ${log.details || 'No additional details'}</div>
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 2px; font-size: 10px; color: #94a3b8;">
-                            <span>🌐 ${browser} • ${os}</span>
-                            <span>📅 ${dateString} • ${timeString}</span>
+                            <span>🌐 ${browser} / ${os}</span>
+                            <span>📅 ${dateString} - ${timeString}</span>
                         </div>
                     </div>
                 `;

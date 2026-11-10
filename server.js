@@ -190,12 +190,13 @@ sqliteDb.exec(`
 console.log("✔ Database tables (users, projects, month_locks, sessions, activity_logs) successfully verified/created.");
 
 // ==========================================
-// AUTO-SEED DEFAULT ACCOUNTS (Admin & Manager)
+// AUTO-SEED DEFAULT ACCOUNTS (Admin, Manager & Video Editor)
 // ==========================================
 try {
     const defaultAccounts = [
         { email: "adminyang@kbhfilms.com", password: "Yangyang#12", fullname: "Kim Bryan Hernandez", role: "admin" },
-        { email: "yongzhi@kbhfilms.com", password: "yong2023", fullname: "Yong Zhi Ng", role: "Manager" }
+        { email: "yongzhi@kbhfilms.com", password: "yong2023", fullname: "Yong Zhi Ng", role: "Manager" },
+        { email: "markromero@kbhfilms.com", password: "markromero123", fullname: "Mark Romero", role: "Video Editor" }
     ];
 
     for (const acc of defaultAccounts) {
@@ -231,7 +232,6 @@ function runAutoBackup() {
     }
 
     const now = new Date();
-    // Gamitin ang PH timezone offset kung kinakailangan o standard ISO date string
     const dateStr = now.toISOString().split('T')[0];
     const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-');
     const backupFileName = `backup-${dateStr}_${timeStr.substring(0, 5)}.json`;
@@ -262,13 +262,9 @@ function runAutoBackup() {
     }
 }
 
-// Mag-run kada 6 na oras (6 hours * 60 minutes * 60 seconds * 1000 ms)
 const SIX_HOURS = 6 * 60 * 60 * 1000;
 setInterval(runAutoBackup, SIX_HOURS);
-
-// Mag-run din 5 segundo pagka-start ng server para may agad na bagong backup
 setTimeout(runAutoBackup, 5000);
-
 
 // ==========================================
 // CLOUDFLARE D1 COMPATIBILITY WRAPPER

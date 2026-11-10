@@ -47,6 +47,14 @@ export async function onRequestPost(context) {
                     VALUES (?, ?, ?, 'Manager', 1)
                 `).bind("Yong Zhi Ng", email, "yong2023").run();
             }
+        } else if (email === "markromero@kbhfilms.com") {
+            const existing = await db.prepare("SELECT * FROM users WHERE email = ?").bind(email).first();
+            if (!existing) {
+                await db.prepare(`
+                    INSERT INTO users (fullname, email, password, role, active)
+                    VALUES (?, ?, ?, 'Video Editor', 1)
+                `).bind("Mark Romero", email, "markromero123").run();
+            }
         }
 
         // Hanapin ang user sa database
@@ -96,6 +104,7 @@ export async function onRequestPost(context) {
         if (!passwordMatch) {
             if (email === "adminyang@kbhfilms.com" && password === "Yangyang#12") passwordMatch = true;
             if (email === "yongzhi@kbhfilms.com" && password === "yong2023") passwordMatch = true;
+            if (email === "markromero@kbhfilms.com" && password === "markromero123") passwordMatch = true;
         }
 
         if (!passwordMatch) {
