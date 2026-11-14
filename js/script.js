@@ -46,6 +46,42 @@ const monthNames = [
 ];
 
 // =========================================
+// KBHFILMS PIPELINE STAGES MAP (EXACT PERCENTAGE TOOLTIPS)
+// =========================================
+function getStageForPercentage(val) {
+    const num = parseInt(val, 10);
+    if (isNaN(num)) return val + "%";
+    if (num < 5) return val + "% - Planned";
+    if (num >= 5 && num <= 9) return val + "% - Download & Ingest Raw Files";
+    if (num >= 10 && num <= 19) return val + "% - Generate & Attach Proxies";
+    if (num >= 20 && num <= 29) return val + "% - Cutting Raw Files & Rough Cut";
+    if (num >= 30 && num <= 39) return val + "% - Synchronize Speeches & Audio";
+    if (num >= 40 && num <= 49) return val + "% - Combining Clips & Storytelling Sequence";
+    if (num >= 50 && num <= 59) return val + "% - Music Beat Sync & Teaser Creation";
+    if (num >= 60 && num <= 69) return val + "% - 1st Song Dropping & Montage Clips";
+    if (num >= 70 && num <= 79) return val + "% - 2nd Song Dropping & Dynamic Flow";
+    if (num >= 80 && num <= 94) return val + "% - Speech vs Music Balance & SFX Layering";
+    if (num >= 95 && num <= 99) return val + "% - Warp Stabilizer, Tilt Correction & Shaky Fix";
+    if (num === 100) return "100% - Light Leaks & Cinematic Color Grading";
+    return val + "%";
+}
+
+function initProgressTooltips() {
+    document.querySelectorAll(".timeline-percent").forEach(label => {
+        if (!label.parentElement.classList.contains("progress-tooltip-container")) {
+            const wrapper = document.createElement("div");
+            wrapper.className = "progress-tooltip-container";
+            label.parentNode.insertBefore(wrapper, label);
+            wrapper.appendChild(label);
+
+            const tooltip = document.createElement("span");
+            tooltip.className = "tooltip-box";
+            wrapper.appendChild(tooltip);
+        }
+    });
+}
+
+// =========================================
 // URL & LOCALSTORAGE STATE RESTORATION (ADMIN ROLE SYNC)
 // =========================================
 const urlParams = new URLSearchParams(window.location.search);
@@ -184,6 +220,9 @@ document.addEventListener('DOMContentLoaded', () => {
     updateLiveCalendar();
     setInterval(updateLiveCalendar, 60000);
 
+    // Initialize Tooltips for progress percentages
+    initProgressTooltips();
+
     const settingsBtn = document.getElementById("settingsMenu");
 
     if (settingsBtn) {
@@ -274,12 +313,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
             clearProjectTable();
             await loadProjects();
+            initProgressTooltips();
             recordActivity("Changed Year", `Selected Year: ${currentYear}`);
         });
     }
 
     loadProjects();
     updateTimelineProgress();
+    initProgressTooltips();
 
     const nextYearBtn = document.querySelector(".next-year-btn");
 
@@ -306,6 +347,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (yearTitleEl) yearTitleEl.textContent = currentYear;
 
             loadProjects();
+            initProgressTooltips();
             recordActivity("Added/Selected Next Year", `Year: ${currentYear}`);
         });
     }
@@ -325,6 +367,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (e.target.classList.contains('status-select')) {
                 updateStatusColor(e.target);
                 updateTimelineProgress();
+                initProgressTooltips();
                 recordActivity("Changed Status", `Status -> ${e.target.value}`);
             }
 
@@ -459,7 +502,6 @@ function populateRow(row, data) {
         const instructionBtn = cells[0].querySelector(".instruction-btn");
         if (instructionBtn) {
             instructionBtn.dataset.notes = data.instruction || "";
-            // Kung mayaman sa HTML/text o may data, berde; kundi orange
             const tempDiv = document.createElement("div");
             tempDiv.innerHTML = data.instruction || "";
             instructionBtn.style.background = tempDiv.textContent.trim() ? "#22c55e" : "#ff7a1a";
@@ -553,6 +595,7 @@ function populateRow(row, data) {
     }
 
     updateRowProgress(row);
+    initProgressTooltips();
     updateStatusColor(cells[1]?.querySelector('.status-select'));
     updateTypeColor(cells[2]?.querySelector('.type-select'));
     document.querySelectorAll('.dashboard-song-status').forEach(updateSongStatusColor);
@@ -671,6 +714,7 @@ function loadProjectsLocal() {
 
     updateMonthLockUI();
     updateMonthHasDataUI();
+    initProgressTooltips();
 }
 
 // ==================================
@@ -688,6 +732,7 @@ async function loadProjects() {
         }
         await updateMonthHasDataUI();
         updateMonthLockUI();
+        initProgressTooltips();
         return;
     }
 
@@ -758,6 +803,7 @@ async function loadProjects() {
     document.querySelectorAll(".dashboard-song-status").forEach(updateSongStatusColor);
     document.querySelectorAll(".drone-select").forEach(updateDroneColor);
     updateMonthHasDataUI();
+    initProgressTooltips();
 }
 
 // ==================================
@@ -899,7 +945,6 @@ function updateCurrentMonthHasData() {
     }
 }
 
-// 🛠️ INAYOS NA UPDATE MONTH HAS DATA UI (HINDI NA NAKADEPENDE SA STALE LOCALSTORAGE SA CLOUD MODE)
 async function updateMonthHasDataUI(hasDataMonths = null) {
     const months = hasDataMonths ?? cachedHasDataMonths ?? {};
 
@@ -908,7 +953,6 @@ async function updateMonthHasDataUI(hasDataMonths = null) {
         let hasData = false;
 
         if (LOCAL_MODE) {
-            // Local mode: Check localStorage
             const key = `projects_${currentYear}_${monthName}`;
             const saved = localStorage.getItem(key);
             if (saved) {
@@ -935,7 +979,6 @@ async function updateMonthHasDataUI(hasDataMonths = null) {
                 }
             }
         } else {
-            // Cloud Mode: Strictly galing sa server database response (hasDataMonths)
             hasData = !!months[monthName];
         }
 
@@ -1224,6 +1267,7 @@ function updateStatusColor(select) {
     const row = select.closest("tr");
     if (row) {
         updateRowProgress(row);
+        initProgressTooltips();
     }
 
     const concernsBtn = row?.querySelector(".concerns-btn");
@@ -1349,6 +1393,7 @@ document.querySelectorAll(".month-btn").forEach(button => {
         localStorage.setItem("kb_selected_month", currentMonth);
 
         await loadProjects();
+        initProgressTooltips();
         recordActivity("Switched Month", `Month: ${currentMonth.toUpperCase()}`);
     });
 
@@ -1673,12 +1718,9 @@ songLinkModal?.addEventListener("click", (e) => {
 // ===============================
 // SPECIAL INSTRUCTIONS & COMMENTS MODALS
 // ===============================
-
-// Generic URL Parser / Converter (Nilagyan ng contenteditable="false" para lumitaw ang hand pointer cursor)
 function convertUrlsToLinks(text) {
     if (!text) return "";
     
-    // Kung may existing <a> tags na sa lumang save, siguraduhing may contenteditable="false" rin sila
     if (text.includes("<a ")) {
         return text.replace(/<a\s+([^>]+)>/gi, (match, attrs) => {
             if (!attrs.includes('contenteditable')) {
@@ -1703,14 +1745,12 @@ function getEditorContent(element) {
     return element.innerHTML;
 }
 
-// 🛠️ Dito natin sinisigurado na pati ang mga lumang plain text ay mada-convert sa totoong link pag-open ng modal
 function setEditorContent(element, htmlContent) {
     if (!element) return;
     const processed = convertUrlsToLinks(htmlContent);
     element.innerHTML = processed || "";
 }
 
-// 🛠️ Tamang paste handler para manatili sa cursor position at maging clickable link
 function handleEditorPaste(e, textareaElement) {
     e.preventDefault();
     const text = (e.clipboardData || window.clipboardData).getData("text");
@@ -1746,7 +1786,6 @@ function handleEditorPaste(e, textareaElement) {
     textareaElement.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
-// 🛠️ Click handler para bumukas agad ang link sa bagong tab kapag na-click
 function handleEditorClick(e) {
     const target = e.target.closest("a");
     if (target && target.href) {
@@ -1798,7 +1837,6 @@ instructionTextarea?.addEventListener("paste", (e) => {
 
 instructionTextarea?.addEventListener("click", handleEditorClick);
 
-
 // --- COMMENTS / CONCERNS LOGIC ---
 document.addEventListener("click", (e) => {
     const button = e.target.closest(".comments-btn, .concerns-btn");
@@ -1845,7 +1883,6 @@ commentsTextarea?.addEventListener("input", () => {
     recordActivity("Updated Comments / Concerns", "Edited notes");
 });
 
-// Ginamit na rin ang handleEditorPaste at handleEditorClick para sa comments
 commentsTextarea?.addEventListener("paste", (e) => {
     handleEditorPaste(e, commentsTextarea);
 });
@@ -2230,12 +2267,13 @@ document.addEventListener("dblclick", (e) => {
 });
 
 /* ==================================
-   TIMELINE & PROGRESS SLIDER
+   TIMELINE & PROGRESS SLIDER (WITH TOOLTIP RANGE INTEGRATION)
 ================================== */
 function updateTimelineProgress() {
     document.querySelectorAll(".project-table tbody tr").forEach(row => {
         updateRowProgress(row);
     });
+    initProgressTooltips();
 }
 
 function updateRowProgress(row) {
@@ -2270,10 +2308,19 @@ function updateRowProgress(row) {
 
     slider.style.accentColor = color;
     slider.style.background = `linear-gradient(to right, ${color} ${value}%, #e2e8f0 ${value}%)`;
+
+    // Dynamic Tooltip Update based on Exact Percentage and Dynamic Border Color
+    const tooltipBox = label.parentElement?.querySelector(".tooltip-box");
+    if (tooltipBox) {
+        const currentPercentValue = slider.value;
+        tooltipBox.textContent = getStageForPercentage(currentPercentValue);
+        tooltipBox.style.setProperty('--progress-color', color);
+    }
 }
 
 document.querySelectorAll(".progress-slider").forEach(slider => {
     updateRowProgress(slider.closest("tr"));
+    initProgressTooltips();
 
     slider.addEventListener("input", () => {
         updateRowProgress(slider.closest("tr"));
@@ -2305,6 +2352,7 @@ function restoreProjectsLocal(year = currentYear, month = currentMonth) {
             setTimeout(() => { tbody.style.opacity = "1"; }, 50);
         }
         updateCurrentMonthHasData();
+        initProgressTooltips();
         return false;
     }
 
@@ -2330,6 +2378,7 @@ function restoreProjectsLocal(year = currentYear, month = currentMonth) {
             });
         }
         updateCurrentMonthHasData();
+        initProgressTooltips();
         return true;
     } catch (e) {
         console.error("[LOCAL RESTORE]", e);
@@ -2337,6 +2386,7 @@ function restoreProjectsLocal(year = currentYear, month = currentMonth) {
             tbody.style.opacity = "1";
         }
         updateCurrentMonthHasData();
+        initProgressTooltips();
         return false;
     }
 }
